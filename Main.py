@@ -28,6 +28,4 @@ global_pose_network = Model(inputs=base_model.input, outputs=[delta_xyz, delta_r
 global_pose_network.compile(optimizer='Adam',loss='mean_squared_error')
 global_pose_network.summary()
 
-#for i,layer in enumerate(model.layers):
-#    print(i,layer.name)
 
