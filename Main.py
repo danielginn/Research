@@ -50,6 +50,8 @@ def loadImages(numImages):
         file_handle.close()
     return images,xyz,q
 
+x_train, y_xyz_train, y_q_train = loadImages(2)
+
 base_model = ResNet50(weights='imagenet',include_top=False)
 
 x = base_model.output
@@ -63,18 +65,8 @@ global_pose_network = Model(inputs=base_model.input, outputs=[xyz, q])
 global_pose_network.compile(optimizer='Adam',loss='mean_squared_error')
 #global_pose_network.summary()
 
+datagen = ImageDataGenerator()
 
-x_train, y_xyz_train, y_q_train = loadImages(2)
+global_pose_network.fit(x=x_train, y=[y_xyz_train, y_q_train], batch_size=32, epochs=1, verbose=1, shuffle=False, steps_per_epoch=None)
+
 print("Finished Successfully")
-#train_datagen = ImageDataGenerator(preprocessing_function=preprocess_input) #included in our dependencies
-
-#train_generator = train_datagen.flow_from_directory('./7scenes/chess/test/',
-#                                                      target_size=(224,224),
-#                                                      color_mode='rgb',
-#                                                      batch_size=32,
-#                                                      class_mode='categorical',
-#                                                      shuffle=True)
-
-
-
-
