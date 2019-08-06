@@ -1,10 +1,11 @@
 import pandas as pd
+import re
 import numpy as np
 import os
 import keras
 import scipy
 import matplotlib as plt
-from keras.layers import Dense, GlobalAveragePooling2D
+from keras.layers import Dense, GlobalAveragePooling2D, Activation
 from keras.applications import ResNet50
 #from keras.preprocessing import image
 from PIL import Image
@@ -73,6 +74,66 @@ def crop_generator(batches, crop_length):
         batch_crops[i] = random_crop(batches[i], (crop_length, crop_length))
     return batch_crops
 
+def insert_layer_nonseq(model, layer_regex, insert_layer_factory,
+                        insert_layer_name=None, position='after'):
+
+    # Auxiliary dictionary to describe the network graph
+    network_dict = {'input_layers_of': {}, 'new_output_tensor_of': {}}
+
+    # Set the input layers of each layer
+    for layer in model.layers:
+        for node in layer._outbound_nodes:
+            layer_name = node.outbound_layer.name
+            if layer_name not in network_dict['input_layers_of']:
+                network_dict['input_layers_of'].update(
+                        {layer_name: [layer.name]})
+            else:
+                network_dict['input_layers_of'][layer_name].append(layer.name)
+
+    # Set the output tensor of the input layer
+    network_dict['new_output_tensor_of'].update(
+            {model.layers[0].name: model.input})
+
+    # Iterate over all layers after the input
+    for layer in model.layers[1:]:
+
+        # Determine input tensors
+        layer_input = [network_dict['new_output_tensor_of'][layer_aux]
+                for layer_aux in network_dict['input_layers_of'][layer.name]]
+        if len(layer_input) == 1:
+            layer_input = layer_input[0]
+
+        # Insert layer if name matches the regular expression
+        if re.match(layer_regex, layer.name):
+            if position == 'replace':
+                x = layer_input
+            elif position == 'after':
+                x = layer(layer_input)
+            elif position == 'before':
+                pass
+            else:
+                raise ValueError('position must be: before, after or replace')
+
+            new_layer = insert_layer_factory()
+            if insert_layer_name:
+                new_layer.name = insert_layer_name
+            else:
+                new_layer.name = layer.name
+            x = new_layer(x)
+            print('Layer {} inserted after layer {}'.format(new_layer.name,
+                                                            layer.name))
+            if position == 'before':
+                x = layer(x)
+        else:
+            x = layer(layer_input)
+
+        # Set new output tensor (the original one, or the one of the inserted
+        # layer)
+        network_dict['new_output_tensor_of'].update({layer.name: x})
+
+    return Model(inputs=model.inputs, outputs=x)
+
+
 
 x_train, y_xyz_train, y_q_train = loadImages(1000)
 print("x_train shape: ",x_train.shape)
@@ -88,8 +149,19 @@ q = Dense(4, activation='softmax', name='q')(x)  # **** Assuming softmax (rho/th
 
 global_pose_network = Model(inputs=base_model.input, outputs=[xyz, q])
 
+
+# Replace all ReLUs with ELUs
+def dropout_layer_factory():
+    return Activation('elu')
+
+
+global_pose_network = insert_layer_nonseq(model=global_pose_network, layer_regex='.*activation.*', insert_layer_factory=dropout_layer_factory, position='replace')
+
 global_pose_network.compile(optimizer='Adam',loss='mean_squared_error')
-#global_pose_network.summary()
+global_pose_network.summary()
+
+layer = global_pose_network.get_layer('activation_1').get_config()
+print(layer)
 
 train_datagen = ImageDataGenerator(featurewise_center=True)
 # compute quantities required for featurewise normalization
@@ -97,7 +169,7 @@ train_datagen = ImageDataGenerator(featurewise_center=True)
 train_datagen.fit(x_train)
 train_crops = crop_generator(x_train, 224)
 
-global_pose_network.fit(x=train_crops, y={'xyz' : y_xyz_train, 'q': y_q_train}, batch_size=32, verbose=1, shuffle=False, epochs=1)
+#global_pose_network.fit(x=train_crops, y={'xyz' : y_xyz_train, 'q': y_q_train}, batch_size=32, verbose=1, shuffle=False, epochs=1)
 
 
 print("Finished Successfully")
