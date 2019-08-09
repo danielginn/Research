@@ -5,7 +5,8 @@ import os
 import keras
 import scipy
 import matplotlib as plt
-from keras.layers import Dense, GlobalAveragePooling2D, Activation
+from keras.layers import Dense, GlobalAveragePooling2D, Activation, concatenate, Reshape, Input, Add, Conv2D, Concatenate
+from keras.initializers import VarianceScaling
 from keras.applications import ResNet50
 #from keras.preprocessing import image
 from PIL import Image
@@ -75,7 +76,7 @@ def crop_generator(batches, crop_length):
     return batch_crops
 
 def insert_layer_nonseq(model, layer_regex, insert_layer_factory,
-                        insert_layer_name=None, position='after'):
+                        insert_layer_name=None, position='after', special=False, special_layer=None):
 
     # Auxiliary dictionary to describe the network graph
     network_dict = {'input_layers_of': {}, 'new_output_tensor_of': {}}
@@ -114,12 +115,20 @@ def insert_layer_nonseq(model, layer_regex, insert_layer_factory,
             else:
                 raise ValueError('position must be: before, after or replace')
 
-            new_layer = insert_layer_factory()
-            if insert_layer_name:
-                new_layer.name = insert_layer_name
+            if (special == False):
+                new_layer = insert_layer_factory()
+                if insert_layer_name:
+                    new_layer.name = insert_layer_name
+                else:
+                    new_layer.name = layer.name
+                x = new_layer(x)
             else:
-                new_layer.name = layer.name
-            x = new_layer(x)
+                new_layer = Concatenate([layer_input, special_layer])
+                if insert_layer_name:
+                    new_layer.name = insert_layer_name
+                else:
+                    new_layer.name = layer.name
+                x = new_layer
             print('Layer {} inserted after layer {}'.format(new_layer.name,
                                                             layer.name))
             if position == 'before':
@@ -139,29 +148,49 @@ x_train, y_xyz_train, y_q_train = loadImages(1000)
 print("x_train shape: ",x_train.shape)
 print("y_xyz_train shape: ",y_xyz_train.shape)
 print("y_q_train shape: ",y_q_train.shape)
-base_model = ResNet50(weights='imagenet', include_top=False)
+base_model = ResNet50(weights='imagenet', include_top=False, input_shape=(224,224,3))
 
-x = base_model.output
-x = GlobalAveragePooling2D()(x)  # **** Assuming 2D, with no arguments required
-x = Dense(1024, activation='relu', name='fc1')(x)  # **** Assuming relu
-xyz = Dense(3, activation='softmax', name='xyz')(x)  # **** Assuming softmax is the correct activation here
-q = Dense(4, activation='softmax', name='q')(x)  # **** Assuming softmax (rho/theta/phi) and quaternians
-
-global_pose_network = Model(inputs=base_model.input, outputs=[xyz, q])
-
+#layer = base_model.get_layer('res5a_branch2a').get_config()
+#print(layer)
 
 # Replace all ReLUs with ELUs
 def dropout_layer_factory():
     return Activation('elu')
 
 
-global_pose_network = insert_layer_nonseq(model=global_pose_network, layer_regex='.*activation.*', insert_layer_factory=dropout_layer_factory, position='replace')
+#base_model = insert_layer_nonseq(model=base_model, layer_regex='.*activation.*', insert_layer_factory=dropout_layer_factory, position='replace')
+
+#########################################################################
+######    Inserting feedback loop    ####################################
+#########################################################################
+#activation_40 = base_model.get_layer('activation_40').output
+input_xyz_prev = Input(shape=(3,),name='input_xyz_prev')
+input_q_prev = Input(shape=(4,),name='input_q_prev')
+xyzq = concatenate([input_xyz_prev,input_q_prev])
+fc4 = Dense(200704, activation='elu', name='fc4')(xyzq)
+fc4Reshaped = Reshape((14,14,-1))(fc4)
+#concatenation = concatenate([activation_40,fc4Reshaped])
+
+feedbackLoopInserted = insert_layer_nonseq(model=base_model, layer_regex='activation_40', insert_layer_factory=dropout_layer_factory, position='after',special=True,special_layer=fc4Reshaped)
+
+#########################################################################
+######    Replacing Res5 components after feedback loop    ##############
+#########################################################################
+#x = Conv2D(filters=512, kernel_size=(1,1),strides=(2,2), data_format='channels_last', activation='linear',kernel_initializer=VarianceScaling(scale=2.0),name='res5a_branch2a')
+#print(x.get_config())
+
+x = feedbackLoopInserted.output
+x = GlobalAveragePooling2D()(x)  # **** Assuming 2D, with no arguments required
+x = Dense(1024, activation='elu', name='fc1')(x)  # **** Assuming relu
+xyz = Dense(3, activation='softmax', name='xyz')(x)  # **** Assuming softmax is the correct activation here
+q = Dense(4, activation='softmax', name='q')(x)  # **** Assuming softmax (rho/theta/phi) and quaternians
+
+
+#global_pose_network = Model(inputs=[base_model.input,input_xyz_prev, input_q_prev], outputs=x)
+global_pose_network = Model(inputs=base_model.input, outputs=[xyz, q])
 
 global_pose_network.compile(optimizer='Adam',loss='mean_squared_error')
 global_pose_network.summary()
-
-layer = global_pose_network.get_layer('activation_1').get_config()
-print(layer)
 
 train_datagen = ImageDataGenerator(featurewise_center=True)
 # compute quantities required for featurewise normalization
