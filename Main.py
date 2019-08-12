@@ -5,7 +5,7 @@ import os
 import keras
 import scipy
 import matplotlib as plt
-from keras.layers import Dense, GlobalAveragePooling2D, Activation, concatenate, Reshape, Input, Add, Conv2D, Concatenate
+from keras.layers import Dense, GlobalAveragePooling2D, Activation, concatenate, Reshape, Input, Conv2D, Concatenate, BatchNormalization, Add
 from keras.initializers import VarianceScaling
 from keras.applications import ResNet50
 #from keras.preprocessing import image
@@ -142,7 +142,121 @@ def insert_layer_nonseq(model, layer_regex, insert_layer_factory,
 
     return Model(inputs=model.inputs, outputs=x)
 
+def insert_feedback_loop(model):
+    #########################################################################
+    ######    Inserting feedback loop    ####################################
+    #########################################################################
+    activation_40 = model.get_layer('activation_40').output
+    input_xyz_prev = Input(shape=(3,), name='input_xyz_prev')
+    input_q_prev = Input(shape=(4,), name='input_q_prev')
+    xyzq = concatenate([input_xyz_prev, input_q_prev])
+    fc4 = Dense(200704, activation='elu', name='fc4')(xyzq)
+    fc4Reshaped = Reshape((14, 14, -1))(fc4)
+    feedbackLoopInserted = concatenate([activation_40, fc4Reshaped])
 
+    ####################################################################
+    #    Replacing Res5 components after feedback loop    ##############
+    ####################################################################
+
+    ################################
+    # Res5a Main Branch ############
+    ################################
+
+    #############
+    # Res5a A ###
+    #############
+    x = Conv2D(filters=512, kernel_size=(1, 1), strides=(2, 2), padding='valid', data_format='channels_last', activation='linear',
+               kernel_initializer=VarianceScaling(scale=2.0), name='res5a_branch2a')(feedbackLoopInserted)
+    x = BatchNormalization(axis=3,name='bn5a_branch2a')(x)
+    x = Activation('elu',name='activation_41')(x)
+
+    #############
+    # Res5a B ###
+    #############
+    x = Conv2D(filters=512, kernel_size=(3, 3), strides=(1, 1), padding='same', data_format='channels_last', activation='linear',
+               kernel_initializer=VarianceScaling(scale=2.0), name='res5a_branch2b')(x)
+    x = BatchNormalization(axis=3, name='bn5a_branch2b')(x)
+    x = Activation('elu', name='activation_42')(x)
+
+    #############
+    # Res5a C ###
+    #############
+    x = Conv2D(filters=2048, kernel_size=(1, 1), strides=(1, 1), padding='valid', data_format='channels_last', activation='linear',
+               kernel_initializer=VarianceScaling(scale=2.0), name='res5a_branch2c')(x)
+    x = BatchNormalization(axis=3, name='bn5a_branch2c')(x)
+
+    ################################
+    # Res5a Skip Branch ############
+    ################################
+    y = Conv2D(filters=2048, kernel_size=(1, 1), strides=(2, 2), padding='valid', data_format='channels_last', activation='linear',
+               kernel_initializer=VarianceScaling(scale=2.0), name='res5a_branch1')(feedbackLoopInserted)
+    y = BatchNormalization(axis=3, name='bn5a_branch1')(y)
+
+    ################################
+    # Res5b Main Branch ############
+    ################################
+    x = Add(name='add_14')([x,y])
+    y = Activation('elu', name='activation_43')(x)
+
+    #############
+    # Res5b A ###
+    #############
+    x = Conv2D(filters=512, kernel_size=(1, 1), strides=(1, 1), padding='valid', data_format='channels_last',
+               activation='linear', kernel_initializer=VarianceScaling(scale=2.0), name='res5b_branch2a')(y)
+    x = BatchNormalization(axis=3, name='bn5b_branch2a')(x)
+    x = Activation('elu', name='activation_44')(x)
+
+    #############
+    # Res5b B ###
+    #############
+    x = Conv2D(filters=512, kernel_size=(3, 3), strides=(1, 1), padding='same', data_format='channels_last',
+               activation='linear', kernel_initializer=VarianceScaling(scale=2.0), name='res5b_branch2b')(x)
+    x = BatchNormalization(axis=3, name='bn5b_branch2b')(x)
+    x = Activation('elu', name='activation_45')(x)
+
+    #############
+    # Res5b C ###
+    #############
+    x = Conv2D(filters=2048, kernel_size=(1, 1), strides=(1, 1), padding='valid', data_format='channels_last',
+               activation='linear', kernel_initializer=VarianceScaling(scale=2.0), name='res5b_branch2c')(x)
+    x = BatchNormalization(axis=3, name='bn5b_branch2c')(x)
+
+    ################################
+    # Res5c Main Branch ############
+    ################################
+    x = Add(name='add_15')([x, y])
+    y = Activation('elu', name='activation_46')(x)
+
+    #############
+    # Res5c A ###
+    #############
+    x = Conv2D(filters=512, kernel_size=(1, 1), strides=(1, 1), padding='valid', data_format='channels_last',
+               activation='linear', kernel_initializer=VarianceScaling(scale=2.0), name='res5c_branch2a')(y)
+    x = BatchNormalization(axis=3, name='bn5c_branch2a')(x)
+    x = Activation('elu', name='activation_47')(x)
+
+    #############
+    # Res5c B ###
+    #############
+    x = Conv2D(filters=512, kernel_size=(3, 3), strides=(1, 1), padding='same', data_format='channels_last',
+               activation='linear', kernel_initializer=VarianceScaling(scale=2.0), name='res5c_branch2b')(x)
+    x = BatchNormalization(axis=3, name='bn5c_branch2b')(x)
+    x = Activation('elu', name='activation_48')(x)
+
+    #############
+    # Res5c C ###
+    #############
+    x = Conv2D(filters=2048, kernel_size=(1, 1), strides=(1, 1), padding='valid', data_format='channels_last',
+               activation='linear', kernel_initializer=VarianceScaling(scale=2.0), name='res5c_branch2c')(x)
+    x = BatchNormalization(axis=3, name='bn5c_branch2c')(x)
+
+    ##################
+    # End of Res5c ###
+    ##################
+    x = Add(name='add_16')([x, y])
+    x = Activation('elu', name='activation_49')(x)
+
+    return Model(inputs=[model.input,input_xyz_prev, input_q_prev], outputs=x)
 
 x_train, y_xyz_train, y_q_train = loadImages(1000)
 print("x_train shape: ",x_train.shape)
@@ -150,44 +264,26 @@ print("y_xyz_train shape: ",y_xyz_train.shape)
 print("y_q_train shape: ",y_q_train.shape)
 base_model = ResNet50(weights='imagenet', include_top=False, input_shape=(224,224,3))
 
-#layer = base_model.get_layer('res5a_branch2a').get_config()
-#print(layer)
+
+
 
 # Replace all ReLUs with ELUs
 def dropout_layer_factory():
     return Activation('elu')
 
 
-#base_model = insert_layer_nonseq(model=base_model, layer_regex='.*activation.*', insert_layer_factory=dropout_layer_factory, position='replace')
+base_model = insert_layer_nonseq(model=base_model, layer_regex='.*activation.*', insert_layer_factory=dropout_layer_factory, position='replace')
 
-#########################################################################
-######    Inserting feedback loop    ####################################
-#########################################################################
-#activation_40 = base_model.get_layer('activation_40').output
-input_xyz_prev = Input(shape=(3,),name='input_xyz_prev')
-input_q_prev = Input(shape=(4,),name='input_q_prev')
-xyzq = concatenate([input_xyz_prev,input_q_prev])
-fc4 = Dense(200704, activation='elu', name='fc4')(xyzq)
-fc4Reshaped = Reshape((14,14,-1))(fc4)
-#concatenation = concatenate([activation_40,fc4Reshaped])
+base_model = insert_feedback_loop(base_model)
 
-feedbackLoopInserted = insert_layer_nonseq(model=base_model, layer_regex='activation_40', insert_layer_factory=dropout_layer_factory, position='after',special=True,special_layer=fc4Reshaped)
-
-#########################################################################
-######    Replacing Res5 components after feedback loop    ##############
-#########################################################################
-#x = Conv2D(filters=512, kernel_size=(1,1),strides=(2,2), data_format='channels_last', activation='linear',kernel_initializer=VarianceScaling(scale=2.0),name='res5a_branch2a')
-#print(x.get_config())
-
-x = feedbackLoopInserted.output
+x = base_model.output
 x = GlobalAveragePooling2D()(x)  # **** Assuming 2D, with no arguments required
 x = Dense(1024, activation='elu', name='fc1')(x)  # **** Assuming relu
 xyz = Dense(3, activation='softmax', name='xyz')(x)  # **** Assuming softmax is the correct activation here
 q = Dense(4, activation='softmax', name='q')(x)  # **** Assuming softmax (rho/theta/phi) and quaternians
 
-
-#global_pose_network = Model(inputs=[base_model.input,input_xyz_prev, input_q_prev], outputs=x)
-global_pose_network = Model(inputs=base_model.input, outputs=[xyz, q])
+#global_pose_network = Model(inputs=base_model.input, outputs=[xyz, q])
+global_pose_network = Model(inputs=base_model.inputs, outputs=[xyz, q])
 
 global_pose_network.compile(optimizer='Adam',loss='mean_squared_error')
 global_pose_network.summary()
@@ -200,5 +296,7 @@ train_crops = crop_generator(x_train, 224)
 
 #global_pose_network.fit(x=train_crops, y={'xyz' : y_xyz_train, 'q': y_q_train}, batch_size=32, verbose=1, shuffle=False, epochs=1)
 
+#layer = base_model.get_layer('bn5c_branch2c').get_config()
+#print(layer)
 
 print("Finished Successfully")
