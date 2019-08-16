@@ -5,8 +5,8 @@ import os
 import keras
 import scipy
 import matplotlib as plt
-from keras.layers import Dense, GlobalAveragePooling2D, Activation, concatenate, Reshape, Input, Conv2D, Concatenate, BatchNormalization, Add
-from keras.initializers import VarianceScaling
+from keras.layers import Dense, GlobalAveragePooling2D, Activation, concatenate, Reshape, Input, Conv2D, Concatenate, BatchNormalization, Add, Dropout
+from keras.initializers import VarianceScaling, Ones
 from keras.applications import ResNet50
 #from keras.preprocessing import image
 from PIL import Image
@@ -21,38 +21,42 @@ from keras.preprocessing.image import load_img
 from scipy.spatial.transform import Rotation as R
 
 # print(device_lib.list_local_devices())
-def loadImages(numImages):
+def loadImages(scene,sequences):
+    print("  ",scene,":", sep='')
+    numImages = 4000
     images = np.zeros((numImages,256,341,3))
     xyz = np.zeros((numImages,3))
     q = np.zeros((numImages,4))
     # load the image
-    for i in range(numImages):
-        # Load in image
-        mainFilePath = "./7scenes/chess/seq-01/frame"
-        imageFileName = "{}-{}.color.png".format(mainFilePath,str(i).zfill(6))
-        img = load_img(imageFileName)
-        img = img.resize((341,256),Image.ANTIALIAS)
-        images[i,:,:,:] = img_to_array(img)
+    seq_num = 1
+    for seq in sequences:
+        print("    Seq-0",seq,sep='')
+        for i in range(1000):
+            # Load in image
+            imageFileName = "./7scenes/{}/seq-0{}/frame-{}.color.png".format(scene,seq,str(i).zfill(6))
+            img = load_img(imageFileName)
+            img = img.resize((341,256),Image.ANTIALIAS)
+            images[1000*(seq_num-1)+i,:,:,:] = img_to_array(img)
 
-        # Load in pose data
-        poseFileName = "{}-{}.pose.txt".format(mainFilePath,str(i).zfill(6))
-        file_handle = open(poseFileName, 'r')
-        # Read in all the lines of your file into a list of lines
-        lines_list = file_handle.readlines()
-        # Do a double-nested list comprehension to store as a Homogeneous Transform matrix
-        homogeneousTransformList = [[float(val) for val in line.split()] for line in lines_list[0:]]
-        homogeneousTransform = np.zeros((4,4))
+            # Load in pose data
+            poseFileName = "./7scenes/{}/seq-0{}/frame-{}.pose.txt".format(scene,seq,str(i).zfill(6))
+            file_handle = open(poseFileName, 'r')
+            # Read in all the lines of your file into a list of lines
+            lines_list = file_handle.readlines()
+            # Do a double-nested list comprehension to store as a Homogeneous Transform matrix
+            homogeneousTransformList = [[float(val) for val in line.split()] for line in lines_list[0:]]
+            homogeneousTransform = np.zeros((4,4))
 
-        for j in range(4):
-            homogeneousTransform[j,:] = homogeneousTransformList[j]
+            for j in range(4):
+                homogeneousTransform[j,:] = homogeneousTransformList[j]
 
-        # Extract rotation from homogeneous Transform
-        r = R.from_dcm(homogeneousTransform[0:3,0:3])
-        q[i,:] = r.as_quat()
-        # Extract xyz from homogeneous Transform
-        xyz[i,:] = homogeneousTransform[0:3,3]
+            # Extract rotation from homogeneous Transform
+            r = R.from_dcm(homogeneousTransform[0:3,0:3])
+            q[1000*(seq_num-1)+i,:] = r.as_quat()
+            # Extract xyz from homogeneous Transform
+            xyz[1000*(seq_num-1)+i,:] = homogeneousTransform[0:3,3]
 
-        file_handle.close()
+            file_handle.close()
     return images,xyz,q
 
 # Following 2 functions copied from https://jkjung-avt.github.io/keras-image-cropping/
@@ -129,8 +133,7 @@ def insert_layer_nonseq(model, layer_regex, insert_layer_factory,
                 else:
                     new_layer.name = layer.name
                 x = new_layer
-            print('Layer {} inserted after layer {}'.format(new_layer.name,
-                                                            layer.name))
+
             if position == 'before':
                 x = layer(x)
         else:
@@ -142,17 +145,18 @@ def insert_layer_nonseq(model, layer_regex, insert_layer_factory,
 
     return Model(inputs=model.inputs, outputs=x)
 
-def insert_feedback_loop(model):
+def insert_feedback_loop(model,dropout_rate):
     #########################################################################
     ######    Inserting feedback loop    ####################################
     #########################################################################
     activation_40 = model.get_layer('activation_40').output
     input_xyz_prev = Input(shape=(3,), name='input_xyz_prev')
     input_q_prev = Input(shape=(4,), name='input_q_prev')
-    xyzq = concatenate([input_xyz_prev, input_q_prev])
-    fc4 = Dense(200704, activation='elu', name='fc4')(xyzq)
-    fc4Reshaped = Reshape((14, 14, -1))(fc4)
-    feedbackLoopInserted = concatenate([activation_40, fc4Reshaped])
+    x = concatenate([input_xyz_prev, input_q_prev])
+    x = Dense(200704, activation='elu', name='fc4')(x)
+    x = Dropout(dropout_rate)(x)
+    fc4Reshaped = Reshape((14, 14, -1))(x)
+    feedbackLoopInserted = concatenate([x, activation_40])
 
     ####################################################################
     #    Replacing Res5 components after feedback loop    ##############
@@ -165,32 +169,90 @@ def insert_feedback_loop(model):
     #############
     # Res5a A ###
     #############
+    # Conv2D ###########################################################################################################
+    layer_name = 'res5a_branch2a'
+    old_weights = model.get_layer(layer_name).get_weights()[0]
+    old_biases = model.get_layer(layer_name).get_weights()[1]
+    temp_layer = Conv2D(filters=512, kernel_size=(1, 1), strides=(2, 2), padding='valid', data_format='channels_last', activation='linear',
+                kernel_initializer=VarianceScaling(scale=2.0), name='TemporaryLayer')(feedbackLoopInserted)
+    temp_model = Model(inputs=[model.input,input_xyz_prev, input_q_prev], outputs=temp_layer)
+    new_weights = temp_model.get_layer('TemporaryLayer').get_weights()[0]
+    new_weights[:,:,1024:,:] = old_weights;
     x = Conv2D(filters=512, kernel_size=(1, 1), strides=(2, 2), padding='valid', data_format='channels_last', activation='linear',
-               kernel_initializer=VarianceScaling(scale=2.0), name='res5a_branch2a')(feedbackLoopInserted)
-    x = BatchNormalization(axis=3,name='bn5a_branch2a')(x)
+               kernel_initializer=VarianceScaling(scale=2.0), name=layer_name, weights=[new_weights,old_biases])(feedbackLoopInserted)
+
+    # Batch Normalisation
+    layer_name = 'bn5a_branch2a'
+    w0 = model.get_layer(layer_name).get_weights()[0]
+    w1 = model.get_layer(layer_name).get_weights()[1]
+    w2 = model.get_layer(layer_name).get_weights()[2]
+    w3 = model.get_layer(layer_name).get_weights()[3]
+    x = BatchNormalization(axis=3,name=layer_name,weights=[w0,w1,w2,w3])(x)
+
+    # ELU Activation
     x = Activation('elu',name='activation_41')(x)
 
     #############
     # Res5a B ###
     #############
+    # Conv2D
+    layer_name = 'res5a_branch2b'
+    W = model.get_layer(layer_name).get_weights()[0]
+    b = model.get_layer(layer_name).get_weights()[1]
     x = Conv2D(filters=512, kernel_size=(3, 3), strides=(1, 1), padding='same', data_format='channels_last', activation='linear',
-               kernel_initializer=VarianceScaling(scale=2.0), name='res5a_branch2b')(x)
-    x = BatchNormalization(axis=3, name='bn5a_branch2b')(x)
+               kernel_initializer=VarianceScaling(scale=2.0), name=layer_name, weights=[W,b])(x)
+
+    # Batch Normalisation
+    layer_name = 'bn5a_branch2b'
+    w0 = model.get_layer(layer_name).get_weights()[0]
+    w1 = model.get_layer(layer_name).get_weights()[1]
+    w2 = model.get_layer(layer_name).get_weights()[2]
+    w3 = model.get_layer(layer_name).get_weights()[3]
+    x = BatchNormalization(axis=3, name=layer_name, weights=[w0,w1,w2,w3])(x)
+
+    # ELU Activation
     x = Activation('elu', name='activation_42')(x)
 
     #############
     # Res5a C ###
     #############
+    # Conv2D
+    layer_name = 'res5a_branch2c'
+    W = model.get_layer(layer_name).get_weights()[0]
+    b = model.get_layer(layer_name).get_weights()[1]
     x = Conv2D(filters=2048, kernel_size=(1, 1), strides=(1, 1), padding='valid', data_format='channels_last', activation='linear',
-               kernel_initializer=VarianceScaling(scale=2.0), name='res5a_branch2c')(x)
-    x = BatchNormalization(axis=3, name='bn5a_branch2c')(x)
+               kernel_initializer=VarianceScaling(scale=2.0), name=layer_name, weights=[W,b])(x)
+
+    # Batch Normalisation
+    layer_name = 'bn5a_branch2c'
+    w0 = model.get_layer(layer_name).get_weights()[0]
+    w1 = model.get_layer(layer_name).get_weights()[1]
+    w2 = model.get_layer(layer_name).get_weights()[2]
+    w3 = model.get_layer(layer_name).get_weights()[3]
+    x = BatchNormalization(axis=3, name=layer_name, weights=[w0, w1, w2, w3])(x)
 
     ################################
     # Res5a Skip Branch ############
     ################################
+    # Conv2D ###########################################################################################################
+    layer_name = 'res5a_branch1'
+    old_weights = model.get_layer(layer_name).get_weights()[0]
+    old_biases = model.get_layer(layer_name).get_weights()[1]
+    temp_layer = Conv2D(filters=2048, kernel_size=(1, 1), strides=(2, 2), padding='valid', data_format='channels_last', activation='linear',
+               kernel_initializer=VarianceScaling(scale=2.0), name='TemporaryLayer2')(feedbackLoopInserted)
+    temp_model = Model(inputs=[model.input, input_xyz_prev, input_q_prev], outputs=temp_layer)
+    new_weights = temp_model.get_layer('TemporaryLayer2').get_weights()[0]
+    new_weights[:, :, 1024:, :] = old_weights;
     y = Conv2D(filters=2048, kernel_size=(1, 1), strides=(2, 2), padding='valid', data_format='channels_last', activation='linear',
-               kernel_initializer=VarianceScaling(scale=2.0), name='res5a_branch1')(feedbackLoopInserted)
-    y = BatchNormalization(axis=3, name='bn5a_branch1')(y)
+               kernel_initializer=VarianceScaling(scale=2.0), name=layer_name, weights=[new_weights,old_biases])(feedbackLoopInserted)
+
+    # Batch Normalisation
+    layer_name = 'bn5a_branch1'
+    w0 = model.get_layer(layer_name).get_weights()[0]
+    w1 = model.get_layer(layer_name).get_weights()[1]
+    w2 = model.get_layer(layer_name).get_weights()[2]
+    w3 = model.get_layer(layer_name).get_weights()[3]
+    y = BatchNormalization(axis=3, name=layer_name, weights=[w0, w1, w2, w3])(y)
 
     ################################
     # Res5b Main Branch ############
@@ -201,25 +263,62 @@ def insert_feedback_loop(model):
     #############
     # Res5b A ###
     #############
+    # Conv2D
+    layer_name = 'res5b_branch2a'
+    W = model.get_layer(layer_name).get_weights()[0]
+    b = model.get_layer(layer_name).get_weights()[1]
     x = Conv2D(filters=512, kernel_size=(1, 1), strides=(1, 1), padding='valid', data_format='channels_last',
-               activation='linear', kernel_initializer=VarianceScaling(scale=2.0), name='res5b_branch2a')(y)
-    x = BatchNormalization(axis=3, name='bn5b_branch2a')(x)
+               activation='linear', kernel_initializer=VarianceScaling(scale=2.0), name=layer_name, weights=[W,b])(y)
+
+    # Batch Normalisation
+    layer_name = 'bn5b_branch2a'
+    w0 = model.get_layer(layer_name).get_weights()[0]
+    w1 = model.get_layer(layer_name).get_weights()[1]
+    w2 = model.get_layer(layer_name).get_weights()[2]
+    w3 = model.get_layer(layer_name).get_weights()[3]
+    x = BatchNormalization(axis=3, name=layer_name, weights=[w0, w1, w2, w3])(x)
+
+    # ELU Activation
     x = Activation('elu', name='activation_44')(x)
 
     #############
     # Res5b B ###
     #############
+    # Conv2D
+    layer_name = 'res5b_branch2b'
+    W = model.get_layer(layer_name).get_weights()[0]
+    b = model.get_layer(layer_name).get_weights()[1]
     x = Conv2D(filters=512, kernel_size=(3, 3), strides=(1, 1), padding='same', data_format='channels_last',
-               activation='linear', kernel_initializer=VarianceScaling(scale=2.0), name='res5b_branch2b')(x)
-    x = BatchNormalization(axis=3, name='bn5b_branch2b')(x)
+               activation='linear', kernel_initializer=VarianceScaling(scale=2.0), name=layer_name, weights=[W,b])(x)
+
+    # Batch Normalisation
+    layer_name = 'bn5b_branch2b'
+    w0 = model.get_layer(layer_name).get_weights()[0]
+    w1 = model.get_layer(layer_name).get_weights()[1]
+    w2 = model.get_layer(layer_name).get_weights()[2]
+    w3 = model.get_layer(layer_name).get_weights()[3]
+    x = BatchNormalization(axis=3, name=layer_name, weights=[w0, w1, w2, w3])(x)
+
+    # ELU Activation
     x = Activation('elu', name='activation_45')(x)
 
     #############
     # Res5b C ###
     #############
+    # Conv2D
+    layer_name = 'res5b_branch2c'
+    W = model.get_layer(layer_name).get_weights()[0]
+    b = model.get_layer(layer_name).get_weights()[1]
     x = Conv2D(filters=2048, kernel_size=(1, 1), strides=(1, 1), padding='valid', data_format='channels_last',
-               activation='linear', kernel_initializer=VarianceScaling(scale=2.0), name='res5b_branch2c')(x)
-    x = BatchNormalization(axis=3, name='bn5b_branch2c')(x)
+               activation='linear', kernel_initializer=VarianceScaling(scale=2.0), name=layer_name, weights=[W,b])(x)
+
+    # Batch Normalisation
+    layer_name = 'bn5b_branch2c'
+    w0 = model.get_layer(layer_name).get_weights()[0]
+    w1 = model.get_layer(layer_name).get_weights()[1]
+    w2 = model.get_layer(layer_name).get_weights()[2]
+    w3 = model.get_layer(layer_name).get_weights()[3]
+    x = BatchNormalization(axis=3, name=layer_name, weights=[w0, w1, w2, w3])(x)
 
     ################################
     # Res5c Main Branch ############
@@ -230,25 +329,62 @@ def insert_feedback_loop(model):
     #############
     # Res5c A ###
     #############
+    # Conv2D
+    layer_name = 'res5c_branch2a'
+    W = model.get_layer(layer_name).get_weights()[0]
+    b = model.get_layer(layer_name).get_weights()[1]
     x = Conv2D(filters=512, kernel_size=(1, 1), strides=(1, 1), padding='valid', data_format='channels_last',
-               activation='linear', kernel_initializer=VarianceScaling(scale=2.0), name='res5c_branch2a')(y)
-    x = BatchNormalization(axis=3, name='bn5c_branch2a')(x)
+               activation='linear', kernel_initializer=VarianceScaling(scale=2.0), name=layer_name, weights=[W,b])(y)
+
+    # Batch Normalisation
+    layer_name = 'bn5c_branch2a'
+    w0 = model.get_layer(layer_name).get_weights()[0]
+    w1 = model.get_layer(layer_name).get_weights()[1]
+    w2 = model.get_layer(layer_name).get_weights()[2]
+    w3 = model.get_layer(layer_name).get_weights()[3]
+    x = BatchNormalization(axis=3, name=layer_name, weights=[w0, w1, w2, w3])(x)
+
+    # ELU Activation
     x = Activation('elu', name='activation_47')(x)
 
     #############
     # Res5c B ###
     #############
+    # Conv2D
+    layer_name = 'res5c_branch2b'
+    W = model.get_layer(layer_name).get_weights()[0]
+    b = model.get_layer(layer_name).get_weights()[1]
     x = Conv2D(filters=512, kernel_size=(3, 3), strides=(1, 1), padding='same', data_format='channels_last',
-               activation='linear', kernel_initializer=VarianceScaling(scale=2.0), name='res5c_branch2b')(x)
-    x = BatchNormalization(axis=3, name='bn5c_branch2b')(x)
+               activation='linear', kernel_initializer=VarianceScaling(scale=2.0), name=layer_name, weights=[W,b])(x)
+
+    # Batch Normalisation
+    layer_name = 'bn5c_branch2b'
+    w0 = model.get_layer(layer_name).get_weights()[0]
+    w1 = model.get_layer(layer_name).get_weights()[1]
+    w2 = model.get_layer(layer_name).get_weights()[2]
+    w3 = model.get_layer(layer_name).get_weights()[3]
+    x = BatchNormalization(axis=3, name=layer_name, weights=[w0, w1, w2, w3])(x)
+
+    # ELU Activation
     x = Activation('elu', name='activation_48')(x)
 
     #############
     # Res5c C ###
     #############
+    # Conv2D
+    layer_name = 'res5c_branch2c'
+    W = model.get_layer(layer_name).get_weights()[0]
+    b = model.get_layer(layer_name).get_weights()[1]
     x = Conv2D(filters=2048, kernel_size=(1, 1), strides=(1, 1), padding='valid', data_format='channels_last',
-               activation='linear', kernel_initializer=VarianceScaling(scale=2.0), name='res5c_branch2c')(x)
-    x = BatchNormalization(axis=3, name='bn5c_branch2c')(x)
+               activation='linear', kernel_initializer=VarianceScaling(scale=2.0), name=layer_name, weights=[W,b])(x)
+
+    # Batch Normalisation
+    layer_name = 'bn5c_branch2c'
+    w0 = model.get_layer(layer_name).get_weights()[0]
+    w1 = model.get_layer(layer_name).get_weights()[1]
+    w2 = model.get_layer(layer_name).get_weights()[2]
+    w3 = model.get_layer(layer_name).get_weights()[3]
+    x = BatchNormalization(axis=3, name=layer_name, weights=[w0, w1, w2, w3])(x)
 
     ##################
     # End of Res5c ###
@@ -258,45 +394,106 @@ def insert_feedback_loop(model):
 
     return Model(inputs=[model.input,input_xyz_prev, input_q_prev], outputs=x)
 
-x_train, y_xyz_train, y_q_train = loadImages(1000)
-print("x_train shape: ",x_train.shape)
-print("y_xyz_train shape: ",y_xyz_train.shape)
-print("y_q_train shape: ",y_q_train.shape)
-base_model = ResNet50(weights='imagenet', include_top=False, input_shape=(224,224,3))
-
-
-
-
 # Replace all ReLUs with ELUs
 def dropout_layer_factory():
     return Activation('elu')
 
+def additional_final_layers(model,dropout_rate):
+    x = base_model.output
+    x = GlobalAveragePooling2D()(x)  # **** Assuming 2D, with no arguments required
+    x = Dropout(dropout_rate)(x)
+    x = Dense(1024, activation='elu', name='fc1')(x)  # **** Assuming relu
+    x = Dropout(dropout_rate)(x)
+    xyz = Dense(3, activation='softmax', name='xyz')(x)  # **** Assuming softmax is the correct activation here
+    q = Dense(4, activation='softmax', name='q')(x)  # **** Assuming softmax (rho/theta/phi) and quaternians
 
-base_model = insert_layer_nonseq(model=base_model, layer_regex='.*activation.*', insert_layer_factory=dropout_layer_factory, position='replace')
+    return Model(inputs=model.inputs, outputs=[xyz,q])
+########################################################################################################################
+########################################################################################################################
+####################################                                               #####################################
+####################################  #######  #######  #######  ######   #######  #####################################
+####################################  #           #     #     #  #     #     #     #####################################
+####################################  #######     #     #######  ######      #     #####################################
+####################################        #     #     #     #  #    #      #     #####################################
+####################################  #######     #     #     #  #     #     #     #####################################
+####################################                                               #####################################
+########################################################################################################################
+########################################################################################################################
 
-base_model = insert_feedback_loop(base_model)
+with tf.device('/device:GPU:0'):
+    print("Loading Image Set and Sequence:")
+    x_train, y_xyz_train, y_q_train = loadImages('chess',[1,2,4,6])
+    print("Images loaded...")
+    base_model = ResNet50(weights='imagenet', include_top=False, input_shape=(224,224,3))
+    print("ResNet50 model loaded...")
 
-x = base_model.output
-x = GlobalAveragePooling2D()(x)  # **** Assuming 2D, with no arguments required
-x = Dense(1024, activation='elu', name='fc1')(x)  # **** Assuming relu
-xyz = Dense(3, activation='softmax', name='xyz')(x)  # **** Assuming softmax is the correct activation here
-q = Dense(4, activation='softmax', name='q')(x)  # **** Assuming softmax (rho/theta/phi) and quaternians
+    #layer_w = base_model.get_layer('add_14').get_weights()
+    #print(layer_w)
+    #layer_weights = base_model.get_layer('res5a_branch2a').get_weights()[0]
+    #print("Layer Weights array shape: ",layer_weights.shape)
+    #print(layer_weights)
+    #layer_biases = base_model.get_layer('res5a_branch2a').get_weights()[1]
+    #print("Layer Biases array shape: ",layer_biases.shape)
+    #print(layer_biases)
 
-#global_pose_network = Model(inputs=base_model.input, outputs=[xyz, q])
-global_pose_network = Model(inputs=base_model.inputs, outputs=[xyz, q])
+    dropout_rate = 0.2
 
-global_pose_network.compile(optimizer='Adam',loss='mean_squared_error')
-global_pose_network.summary()
+    #base_model = insert_layer_nonseq(model=base_model, layer_regex='.*activation.*', insert_layer_factory=dropout_layer_factory, position='replace')
 
-train_datagen = ImageDataGenerator(featurewise_center=True)
-# compute quantities required for featurewise normalization
-# (std, mean, and principal components if ZCA whitening is applied)
-train_datagen.fit(x_train)
-train_crops = crop_generator(x_train, 224)
+    #base_model = insert_feedback_loop(base_model,dropout_rate)
 
-#global_pose_network.fit(x=train_crops, y={'xyz' : y_xyz_train, 'q': y_q_train}, batch_size=32, verbose=1, shuffle=False, epochs=1)
+    base_model = additional_final_layers(base_model,dropout_rate)
 
-#layer = base_model.get_layer('bn5c_branch2c').get_config()
-#print(layer)
+    global_pose_network = base_model
 
-print("Finished Successfully")
+    global_pose_network.compile(optimizer=Adam(lr=1e-4,epsilon=1e-10),loss='mean_squared_error')
+    #global_pose_network.summary()
+
+    train_datagen = ImageDataGenerator(featurewise_center=True)
+
+    train_datagen.fit(x_train)
+    print("Attempting normalization")
+    print(x_train.shape)
+    print("Sample Original pixel:",x_train[0,100,100,0])
+    for i in range(len(x_train)):
+        # this is what you are looking for
+        x_train[i,:,:,:] = train_datagen.standardize(x_train[i,:,:,:])
+    print(x_train.shape)
+    print("Sample Normalized pixel:", x_train[0, 100, 100, 0])
+    x_train = crop_generator(x_train, 224)
+
+
+    global_pose_network.fit(x=x_train, y={'xyz' : y_xyz_train, 'q': y_q_train}, batch_size=32, verbose=1, shuffle=True, epochs=1)
+
+
+    #x_batch,y_batch = train_datagen.flow(x=x_train, y={'xyz' : y_xyz_train, 'q': y_q_train}, batch_size=32)
+    #global_pose_network.fit(x_batch,y_batch, verbose=1, shuffle=True, epochs=1)
+
+    #layer_w = base_model.get_layer('add_14').get_weights()
+    #print(layer_w)
+    #layer_weights = base_model.get_layer('res5a_branch1').get_weights()[0]
+    #print("Layer Weights array shape: ",layer_weights.shape)
+    #print(layer_weights)
+    #layer_biases = base_model.get_layer('res5a_branch1').get_weights()[1]
+    #print("Layer Biases array shape: ",layer_biases.shape)
+    #print(layer_biases)
+
+    #########################################################################
+    ######    Prediction    #################################################
+    #########################################################################
+    #testImage = np.zeros((2,224,224,3))
+    #img = load_img("./TestImage.png")
+    #img = img.resize((224,224),Image.ANTIALIAS)
+    #testImage[0,:,:,:] = img_to_array(img)
+    #testImage[1,:,:,:] = img_to_array(img)
+    #testxyz = np.array([(1,2,3),(1,2,3)])
+    #print("testxyz=",testxyz.shape)
+    #print(testxyz)
+    #testq = np.array([(4,5,6,7),(4,5,6,7)])
+    #print("testq=",testq.shape)
+    #print(testq)
+    #result = global_pose_network.predict(x=[testImage, testxyz, testq],batch_size=2)
+    #print("Results:",result.shape)
+    #print(result)
+
+    print("Finished Successfully")
