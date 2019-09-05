@@ -7,6 +7,9 @@ import scipy
 import matplotlib.pyplot as plt
 from matplotlib import style
 import sys
+import time
+import random
+from matplotlib.pyplot import draw
 from keras.layers import Dense, GlobalAveragePooling2D, Activation, concatenate, Reshape, Input, Conv2D, Concatenate, BatchNormalization, Add, Dropout
 from keras.initializers import VarianceScaling, Ones
 from keras.applications import ResNet50
@@ -21,6 +24,7 @@ import tensorflow as tf
 from tensorflow.python.client import device_lib
 from keras.preprocessing.image import load_img
 from scipy.spatial.transform import Rotation as R
+from keras.utils import multi_gpu_model
 
 # print(device_lib.list_local_devices())
 def loadImages(data_purpose,scene_info):
@@ -425,20 +429,63 @@ def insert_feedback_loop(model,dropout_rate):
 def dropout_layer_factory():
     return Activation('elu')
 
-def additional_final_layers(model,dropout_rate):
+def additional_final_layers(model):
     x = base_model.output
     x = GlobalAveragePooling2D()(x)  # **** Assuming 2D, with no arguments required
-    x = Dropout(dropout_rate)(x)
-    x = Dense(1024, activation='elu', name='fc1')(x)  # **** Assuming relu
-    x = Dropout(dropout_rate)(x)
-    xyz = Dense(3, activation='softmax', name='xyz')(x)  # **** Assuming softmax is the correct activation here
-    q = Dense(4, activation='softmax', name='q')(x)  # **** Assuming softmax (rho/theta/phi) and quaternians
+    #x = Dropout(dropout_rate)(x)
+    x = Dense(1024, activation='relu', name='fc1')(x)  # **** Assuming relu
+    #x = Dropout(dropout_rate)(x)
+    xyz = Dense(3, name='xyz')(x)  # **** Assuming softmax is the correct activation here
+    q = Dense(4, name='q')(x)  # **** Assuming softmax (rho/theta/phi) and quaternians
 
     return Model(inputs=model.inputs, outputs=[xyz,q])
 
-def animate(i):
-    graph_data = open('')
+def Train_epoch(scene_info, datagen, model, quickTrain):
+    xyz_error_sum = 0
+    q_error_sum = 0
+    num_scenes = 0
+    for scene in scene_info:
+        x_train, y_xyz_train, y_q_train = loadImages('train', scene)
+        datagen.fit(x_train)
+        for j in range(len(x_train)):
+            x_train[j, :, :, :] = datagen.standardize(x_train[j, :, :, :])
+        x_train = crop_generator(x_train, 224, isRandom=True)
+        history = model.fit(x=x_train, y={'xyz': y_xyz_train, 'q': y_q_train}, batch_size=32, verbose=0, shuffle=True)
+        xyz_error_sum += history.history["xyz_mean_absolute_error"][0]
+        q_error_sum += history.history["q_mean_absolute_error"][0]
+        num_scenes += 1
+        if (quickTrain):
+            break
+    return model, xyz_error_sum/num_scenes, q_error_sum/num_scenes
 
+def Test_epoch(scene_info, datagen, model, quickTest):
+    xyz_error_sum = 0
+    q_error_sum = 0
+    num_scenes = 0
+    for scene in scene_info:
+        x_test, y_xyz_test, y_q_test = loadImages('test', scene)
+        datagen.fit(x_test)
+        for i in range(len(x_test)):
+            x_test[i, :, :, :] = datagen.standardize(x_test[i, :, :, :])
+        x_test = crop_generator(x_test, 224, isRandom=False)
+        results = model.evaluate(x=x_test, y={'xyz': y_xyz_test, 'q': y_q_test}, verbose=0)
+        print(results)
+        xyz_error_sum += results[3]
+        q_error_sum += results[4]
+        num_scenes += 1
+        if (quickTest):
+            break
+    return xyz_error_sum/num_scenes, q_error_sum/num_scenes
+
+def update_graph(xs,xyz,q):
+    plt.clf()
+    plt.plot(xs, xyz, label='xyz error')
+    plt.plot(xs, q, label='q error')
+    plt.legend(loc='upper right')
+    plt.ylabel('Test Mean Absolute Error')
+    plt.xlabel('Epoch')
+    plt.draw()
+    plt.pause(0.001)
 
 ########################################################################################################################
 ########################################################################################################################
@@ -453,27 +500,26 @@ def animate(i):
 ########################################################################################################################
 
 with tf.device('/device:GPU:0'):
-    style.use('fivethirtyeight')
     base_model = ResNet50(weights='imagenet', include_top=False, input_shape=(224,224,3))
     print("ResNet50 model loaded...")
+    #for layer in base_model.layers[:143]:
+    #    layer.trainable = False
 
-    dropout_rate = 0.2
 
-    base_model = insert_layer_nonseq(model=base_model, layer_regex='.*activation.*', insert_layer_factory=dropout_layer_factory, position='replace')
+    #dropout_rate = 0.2
+
+    #base_model = insert_layer_nonseq(model=base_model, layer_regex='.*activation.*', insert_layer_factory=dropout_layer_factory, position='replace')
 
     #base_model = insert_feedback_loop(base_model,dropout_rate)
 
-    base_model = additional_final_layers(base_model,dropout_rate)
+    base_model = additional_final_layers(base_model) #dropout rate removed
 
+    #global_pose_network = multi_gpu_model(base_model,gpus=2)
     global_pose_network = base_model
 
-    global_pose_network.compile(optimizer=Adam(lr=1e-4,epsilon=1e-10),loss='mean_squared_error', metrics=['mean_squared_error'])
+    global_pose_network.compile(optimizer=Adam(lr=1e-4,epsilon=1e-10),loss='mean_squared_error', metrics=['mean_absolute_error'])
     #global_pose_network.summary()
 
-    ######################################################################
-    ###############  Image loading  ######################################
-    ######################################################################
-    print("Loading Image Set and Sequence:")
     scene_info = [{'name':'chess', 'train_sequences': [1, 2, 4, 6], 'test_sequences': [3, 5], 'num_images': 1000},
                   {'name':'fire', 'train_sequences': [1, 2], 'test_sequences': [3, 4], 'num_images': 1000},
                   {'name':'heads', 'train_sequences': [2], 'test_sequences': [1], 'num_images': 1000},
@@ -485,66 +531,51 @@ with tf.device('/device:GPU:0'):
     ######################################################################
     ###############  Training  ###########################################
     ######################################################################
-    def Train_epoch(scene_info, datagen, model):
-        for scene in scene_info:
-            x_train, y_xyz_train, y_q_train = loadImages('train', scene)
-            datagen.fit(x_train)
-            for j in range(len(x_train)):
-                x_train[j, :, :, :] = datagen.standardize(x_train[j, :, :, :])
-            x_train = crop_generator(x_train, 224, isRandom=True)
-            model.fit(x=x_train, y={'xyz': y_xyz_train, 'q': y_q_train}, batch_size=32, verbose=0, shuffle=True)
-        return model
-
-    def Test_epoch(scene_info, datagen, model):
-        xyz_error_sum = 0
-        q_error_sum = 0
-        for scene in scene_info:
-            x_test, y_xyz_test, y_q_test = loadImages('test', scene)
-            datagen.fit(x_test)
-            for i in range(len(x_test)):
-                x_test[i, :, :, :] = datagen.standardize(x_test[i, :, :, :])
-            x_test = crop_generator(x_test, 224, isRandom=False)
-            results = model.evaluate(x=x_test, y={'xyz': y_xyz_test, 'q': y_q_test}, verbose=0)
-            xyz_error_sum += results[3]
-            q_error_sum += results[4]
-        return xyz_error_sum/7, q_error_sum/7
-
-    def update_graph(xyz,q):
-        xs = np.array(xyz)[:, 0]
-        ys_xyz = np.array(xyz)[:, 1]
-        ys_q = np.array(q)[:, 1]
-        plt.plot(xs, ys_xyz, label='xyz error')
-        plt.plot(xs, ys_q, label='q error')
-        plt.legend(loc='upper right')
-        plt.draw()
-
     print('*****************************')
     print('***** STARTING TRAINING *****')
     print('*****************************')
-
-    datagen = ImageDataGenerator(featurewise_center=True)
+    style.use('fast')
+    datagen = ImageDataGenerator(featurewise_center=False)
     xyz_avg_error = []
     q_avg_error = []
-
+    xs = []
+    #plt.ion()
+    #plt.show()
+    file1 = open("Results.txt", "w")
     # Base-line accuracy
-    e1,e2 = Test_epoch(scene_info=scene_info, datagen=datagen, model=global_pose_network)
-    xyz_avg_error.append([0,e1])
-    q_avg_error.append([0,e2])
-    update_graph(xyz_avg_error,q_avg_error)
+    test_xyz_error,test_q_error = Test_epoch(scene_info=scene_info, datagen=datagen, model=global_pose_network, quickTest=False)
+    file1.write("0,,%s,,%s\n" % (test_xyz_error,test_q_error))
+    file1.close()
+    xs.append(0)
+    xyz_avg_error.append(test_xyz_error)
+    q_avg_error.append(test_q_error)
+    #update_graph(xs,xyz_avg_error,q_avg_error)
+
+
 
     # Train many epochs
-    epoch_max = 100
+    epoch_max = 300
     epochs_per_result = 5
     result_index = epochs_per_result
     for epoch in range(1,epoch_max+1):
         print('Epoch: ',epoch,'/',epoch_max,sep='')
-        global_pose_network = Train_epoch(scene_info=scene_info, datagen=datagen, model=global_pose_network)
+        global_pose_network, train_xyz_error, train_q_error = Train_epoch(scene_info=scene_info, datagen=datagen, model=global_pose_network, quickTrain=False)
+        #time.sleep(1)
         if ((epoch % epochs_per_result) == 0):
-            e1,e2 = Test_epoch(scene_info=scene_info, datagen=datagen, model=global_pose_network)
-            xyz_avg_error.append([result_index, e1])
-            q_avg_error.append([result_index, e2])
+            test_xyz_error,test_q_error = Test_epoch(scene_info=scene_info, datagen=datagen, model=global_pose_network, quickTest=True)
+            print("Testing: [test_xyz_error,test_q_error] = [",test_xyz_error,", ",test_q_error,"]",sep='')
+            file1 = open("Results.txt", "a")
+            file1.write("%s,%s,%s,%s,%s\n" % (result_index, train_xyz_error,test_xyz_error, train_q_error,test_q_error))
+            file1.close()
+            xs.append(result_index)
+            xyz_avg_error.append(test_xyz_error)
+            q_avg_error.append(test_q_error)
             result_index += epochs_per_result
-            update_graph(xyz_avg_error, q_avg_error)
+            #update_graph(xs,xyz_avg_error, q_avg_error)
+
+
+
+
 
     print("Finished Successfully")
-    plt.show()
+    #plt.show()
