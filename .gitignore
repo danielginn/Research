@@ -1,4 +1,6 @@
 # Files probably made by pyCharm
 .idea/
+__pycache__/
 Images/
 7scenes/
+NUbotsDatasets/
