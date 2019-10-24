@@ -1,4 +1,5 @@
 import sys
+import os
 from keras.preprocessing.image import load_img
 from PIL import Image
 import numpy as np
@@ -19,15 +20,20 @@ def loadImages(dataset, data_purpose, scene_info):
         xyz = np.zeros((numImages, 3))
         q = np.zeros((numImages, 4))
         image_index = 0
+        path = "D:\\VLocNet++\\Research\\NUbotsDatasets\\NUbotsSoccerField1\\{}\\".format(data_purpose)
+        print(path)
+        for r, d, f in os.walk(path):
+            for file in f:
+                if '.jpg' in file:
+                    img = load_img(os.path.join(r, file))
+                    img = img.resize((341, 256), Image.ANTIALIAS)
+                    images[image_index, :, :, :] = img_to_array(img)
 
-        for i in range(numImages):
-            # Load in image
-            imageFileName = "./NUbotsDatasets/NUbotsSoccerField1/{}/".format(data_purpose,)
-            imageFileName = "./7scenes/{}/seq-{}/frame-{}.color.png".format(scene_info.get('name'), str(seq).zfill(2),
-                                                                            str(i).zfill(6))
-            img = load_img(imageFileName)
-            img = img.resize((341, 256), Image.ANTIALIAS)
-            images[image_index, :, :, :] = img_to_array(img)
+                    json_filename = file[0:-4] + '.json'
+
+
+
+                    image_index += 1
 
 
 
