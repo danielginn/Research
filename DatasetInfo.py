@@ -2,7 +2,7 @@ import sys
 def GetDatasetInfo(dataset):
 
     if (dataset == 'NUbotsSoccerField1'):
-        scene_info = {'num_train_images': 249, 'num_test_images': 465}
+        scene_info = [{'num_train_images': 249, 'num_test_images': 465}]
 
     elif (dataset == 'NUbotsSoccerField2'):
         sys.exit('NUbotsSoccerField2 info needed in DatasetInfo.py')

@@ -17,7 +17,9 @@ def loadImages(dataset, data_purpose, scene_info):
         else:
             sys.exit('data_purpose must be test or train')
 
-        images = np.zeros((numImages, 256, 341, 3))
+        scale = 0.5
+        height = 224/scale
+        images = np.zeros((numImages, int(round(height)), int(round(height*1.25)), 3))
         xyz = np.zeros((numImages, 3))
         q = np.zeros((numImages, 4))
         image_index = 0
@@ -27,12 +29,12 @@ def loadImages(dataset, data_purpose, scene_info):
             for file in f:
                 if '.jpg' in file:
                     img = load_img(os.path.join(r, file))
-                    img = img.resize((341, 256), Image.ANTIALIAS)
+                    img = img.resize((int(round(height*1.25)), int(round(height))), Image.ANTIALIAS)
                     images[image_index, :, :, :] = img_to_array(img)
 
                     json_filename = file[0:-4] + '.json'
                     with open(os.path.join(r,json_filename)) as f2:
-                        jsondata = json.load(f2)
+                        json_data = json.load(f2)
                     xyz[image_index,:] = json_data['position']
                     q[image_index,:] = json_data['rotation']
 
@@ -136,7 +138,12 @@ def Train_epoch(dataset, scene_info, datagen, model, quickTrain):
         datagen.fit(x_train)
         for j in range(len(x_train)):
             x_train[j, :, :, :] = datagen.standardize(x_train[j, :, :, :])
-        x_train = crop_generator(x_train, 224, isRandom=True)
+
+        if (dataset == '7scenes'):
+            isRandomCrops = True
+        else:
+            isRandomCrops = False
+        x_train = crop_generator(x_train, 224, isRandom=isRandomCrops)
         history = model.fit(x=x_train, y={'xyz': y_xyz_train, 'q': y_q_train}, batch_size=32, verbose=0, shuffle=True)
         xyz_error_sum += history.history["xyz_mean_absolute_error"][0]
         q_error_sum += history.history["q_mean_absolute_error"][0]

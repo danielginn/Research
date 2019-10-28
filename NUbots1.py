@@ -76,10 +76,35 @@ with tf.device('/device:GPU:0'):
     xs = []
     file1 = open("Results.txt", "w")
     # Base-line accuracy
-    test_xyz_error, test_q_error = LocalisationNetwork.Test_epoch(dataset=dataset,scene_info=scene_info, datagen=datagen, model=global_pose_network,
+    test_xyz_error, test_q_error = LocalisationNetwork.Test_epoch(dataset=dataset, scene_info=scene_info, datagen=datagen, model=global_pose_network,
                                               quickTest=False)
     file1.write("0,,%s,,%s\n" % (test_xyz_error, test_q_error))
     file1.close()
     xs.append(0)
     xyz_avg_error.append(test_xyz_error)
     q_avg_error.append(test_q_error)
+
+    # Train many epochs
+    epoch_max = 300
+    epochs_per_result = 5
+    result_index = epochs_per_result
+    for epoch in range(1, epoch_max + 1):
+        print('Epoch: ', epoch, '/', epoch_max, sep='')
+        global_pose_network, train_xyz_error, train_q_error = LocalisationNetwork.Train_epoch(dataset=dataset, scene_info=scene_info, datagen=datagen,
+                                                                          model=global_pose_network, quickTrain=False)
+        # time.sleep(1)
+        if ((epoch % epochs_per_result) == 0):
+            test_xyz_error, test_q_error = LocalisationNetwork.Test_epoch(dataset=dataset, scene_info=scene_info, datagen=datagen, model=global_pose_network,
+                                                      quickTest=False)
+            print("Testing: [test_xyz_error,test_q_error] = [", test_xyz_error, ", ", test_q_error, "]", sep='')
+            file1 = open("Results.txt", "a")
+            file1.write(
+                "%s,%s,%s,%s,%s\n" % (result_index, train_xyz_error, test_xyz_error, train_q_error, test_q_error))
+            file1.close()
+            xs.append(result_index)
+            xyz_avg_error.append(test_xyz_error)
+            q_avg_error.append(test_q_error)
+            result_index += epochs_per_result
+            # update_graph(xs,xyz_avg_error, q_avg_error)
+
+    print("Finished Successfully")
