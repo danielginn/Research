@@ -5,6 +5,7 @@ from PIL import Image
 import numpy as np
 from keras.preprocessing.image import img_to_array
 from scipy.spatial.transform import Rotation as R
+import json
 
 def loadImages(dataset, data_purpose, scene_info):
 
@@ -30,8 +31,10 @@ def loadImages(dataset, data_purpose, scene_info):
                     images[image_index, :, :, :] = img_to_array(img)
 
                     json_filename = file[0:-4] + '.json'
-
-
+                    with open(os.path.join(r,json_filename)) as f2:
+                        jsondata = json.load(f2)
+                    xyz[image_index,:] = json_data['position']
+                    q[image_index,:] = json_data['rotation']
 
                     image_index += 1
 
