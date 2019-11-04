@@ -60,7 +60,7 @@ with tf.device('/device:GPU:0'):
     global_pose_network.compile(optimizer=Adam(lr=1e-4,epsilon=1e-10),loss='mean_squared_error', metrics=['mean_absolute_error'])
     #global_pose_network.summary()
 
-    dataset = 'NUbotsSoccerField1' # Can be: 7scenes, NUbotsSoccerField1, NUbotsSoccerField2
+    dataset = 'NUbotsSoccerField2' # Can be: 7scenes, NUbotsSoccerField1, NUbotsSoccerField2
     scene_info = DatasetInfo.GetDatasetInfo(dataset)
 
     ######################################################################

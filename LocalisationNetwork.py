@@ -9,7 +9,7 @@ import json
 
 def loadImages(dataset, data_purpose, scene_info):
 
-    if (dataset == 'NUbotsSoccerField1'):
+    if ((dataset == 'NUbotsSoccerField1') or (dataset == 'NUbotsSoccerField2')):
         if (data_purpose == 'train'):
             numImages = scene_info.get('num_train_images')
         elif (data_purpose == 'test'):
@@ -23,7 +23,10 @@ def loadImages(dataset, data_purpose, scene_info):
         xyz = np.zeros((numImages, 3))
         q = np.zeros((numImages, 4))
         image_index = 0
-        path = "D:\\VLocNet++\\Research\\NUbotsDatasets\\NUbotsSoccerField1\\{}\\".format(data_purpose)
+        if (dataset == 'NUbotsSoccerField1'):
+            path = "D:\\VLocNet++\\Research\\NUbotsDatasets\\NUbotsSoccerField1\\{}\\".format(data_purpose)
+        else:
+            path = "D:\\VLocNet++\\Research\\NUbotsDatasets\\NUbotsSoccerField2\\{}\\".format(data_purpose)
         print(path)
         for r, d, f in os.walk(path):
             for file in f:
