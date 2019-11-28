@@ -43,8 +43,9 @@ import DatasetInfo
 with tf.device('/device:GPU:0'):
     base_model = ResNet50(weights='imagenet', include_top=False, input_shape=(224,224,3))
     print("ResNet50 model loaded...")
-    #for layer in base_model.layers[:143]:
+    #for layer in base_model.layers[:143]: #175 is the final Activation layer: Activation_49, #143 is another one too.
     #    layer.trainable = False
+    #    print(layer.name)
 
 
     #dropout_rate = 0.2
@@ -57,7 +58,7 @@ with tf.device('/device:GPU:0'):
 
     global_pose_network = base_model
 
-    global_pose_network.compile(optimizer=Adam(lr=1e-4,epsilon=1e-10),loss='mean_squared_error', metrics=['mean_absolute_error'])
+    global_pose_network.compile(optimizer=Adam(lr=1e-4,epsilon=1e-10),loss='mean_squared_error', metrics=[LocalisationNetwork.xyz_error])
     #global_pose_network.summary()
 
     dataset = 'NUbotsSoccerField2' # Can be: 7scenes, NUbotsSoccerField1, NUbotsSoccerField2

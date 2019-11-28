@@ -6,7 +6,23 @@ import numpy as np
 from keras.preprocessing.image import img_to_array
 from scipy.spatial.transform import Rotation as R
 import json
+from keras.callbacks import CSVLogger
+import keras.backend as K
+import tensorflow as tf
+import tensorflow_probability as tfp
 
+# Name: loadImages
+# Inputs:
+# - dataset (String): Name of Dataset used. Options are only 'NUbotsSoccerField1', 'NUbotsSoccerField2', or '7scenes'
+# - data_purpose (String): Options are 'train' or 'test' only.
+# - scene_info (array of dictionaries) : Meta-data about the data to be imported.
+# Returns:
+# - images (4-dim numpy array): [number of images, height, width, channels(=3)]
+# - xyz (2-dim numpy array): [number of images, x-y-z coordinates(=3)]
+# - q (2-dim numpy array): [number of images, quaternian]
+# System Exit Conditions:
+# - 'data_purpose must be test or train': Triggers if data_purpose input was not 'train' or 'test'
+# - 'Unknown dataset': Triggers if dataset input was not one of the known dataset options
 def loadImages(dataset, data_purpose, scene_info):
 
     if ((dataset == 'NUbotsSoccerField1') or (dataset == 'NUbotsSoccerField2')):
@@ -40,6 +56,9 @@ def loadImages(dataset, data_purpose, scene_info):
                         json_data = json.load(f2)
                     xyz[image_index,:] = json_data['position']
                     q[image_index,:] = json_data['rotation']
+
+                    if json_data['tracking_valid'] == False:
+                        print("Tracking INVALID for ",json_filename)
 
                     image_index += 1
 
@@ -131,6 +150,18 @@ def crop_generator(batches, crop_length, isRandom):
             batch_crops[i] = center_crop(batches[i], (crop_length, crop_length))
     return batch_crops
 
+# Custom metric
+def xyz_error(y_true,y_pred):
+    xtrue = y_true[:,0]
+    ytrue = y_true[:,1]
+    ztrue = y_true[:,2]
+    xyz_error = K.sqrt(K.square(xtrue) + K.square(ytrue) +K.square(ztrue))
+    #q_true = y_true[:,3:7]
+
+    median_error = tfp.stats.percentile(xyz_error,q=50, interpolation='linear')
+
+    return median_error
+
 
 def Train_epoch(dataset, scene_info, datagen, model, quickTrain):
     xyz_error_sum = 0
@@ -147,9 +178,25 @@ def Train_epoch(dataset, scene_info, datagen, model, quickTrain):
         else:
             isRandomCrops = False
         x_train = crop_generator(x_train, 224, isRandom=isRandomCrops)
-        history = model.fit(x=x_train, y={'xyz': y_xyz_train, 'q': y_q_train}, batch_size=32, verbose=0, shuffle=True)
-        xyz_error_sum += history.history["xyz_mean_absolute_error"][0]
-        q_error_sum += history.history["q_mean_absolute_error"][0]
+        csv_train_logger = CSVLogger(filename='training.log',append=True)
+        if isinstance(model.output, list):
+            print("Is a multiple output...assuming 2 outputs")
+            history = model.fit(x=x_train, y={'xyz': y_xyz_train, 'q': y_q_train}, batch_size=32, verbose=0, shuffle=True)
+            xyz_error_sum += history.history["xyz_mean_absolute_error"][0]
+            q_error_sum += history.history["q_mean_absolute_error"][0]
+        else:
+            print("Is a single output")
+            print("x_train length:",len(x_train))
+
+            y_train = np.zeros([len(x_train),7])
+            y_train[:,0:3] = y_xyz_train
+            y_train[:,3:7] = y_q_train
+            history = model.fit(x=x_train, y=y_train, batch_size=32, verbose=0, shuffle=True)
+            print(history.history)
+            xyz_error_sum += history.history["xyz_error"][0] # These are incorrect results and must be removed
+            q_error_sum += history.history["xyz_error"][0] # These are incorrect results and must be removed
+
+
         num_scenes += 1
         if (quickTrain):
             break
@@ -165,11 +212,22 @@ def Test_epoch(dataset, scene_info, datagen, model, quickTest):
         for i in range(len(x_test)):
             x_test[i, :, :, :] = datagen.standardize(x_test[i, :, :, :])
         x_test = crop_generator(x_test, 224, isRandom=False)
-        results = model.evaluate(x=x_test, y={'xyz': y_xyz_test, 'q': y_q_test}, verbose=0)
-        print(results)
-        xyz_error_sum += results[3]
-        q_error_sum += results[4]
+        csv_test_logger = CSVLogger(filename='testing.log', append=True)
+        if isinstance(model.output, list): # multi outputs...assuming 2
+            results = model.evaluate(x=x_test, y={'xyz': y_xyz_test, 'q': y_q_test}, verbose=0)
+            xyz_error_sum += results[3]
+            q_error_sum += results[4]
+        else: # single output
+            y_test = np.zeros([len(x_test), 7])
+            y_test[:, 0:3] = y_xyz_test
+            y_test[:, 3:7] = y_q_test
+            results = model.evaluate(x=x_test, y=y_test, verbose=0)
+            print(results)
+            xyz_error_sum += 1 # false results. Need to remove
+            q_error_sum += 1 # false results. Need to remove
         num_scenes += 1
         if (quickTest):
             break
     return xyz_error_sum/num_scenes, q_error_sum/num_scenes
+
+

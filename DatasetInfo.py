@@ -5,7 +5,7 @@ def GetDatasetInfo(dataset):
         scene_info = [{'num_train_images': 249, 'num_test_images': 465}]
 
     elif (dataset == 'NUbotsSoccerField2'):
-        scene_info = [{'num_train_images': 1202, 'num_test_images': 1188}]
+        scene_info = [{'num_train_images': 1202, 'num_test_images': 1179}]
 
     elif (dataset == '7scenes'):
         scene_info = [{'name':'chess', 'train_sequences': [1, 2, 4, 6], 'test_sequences': [3, 5], 'num_images': 1000},
