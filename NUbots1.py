@@ -87,7 +87,7 @@ with tf.device('/device:GPU:0'):
 
     # Train many epochs
     epoch_max = 300
-    epochs_per_result = 5
+    epochs_per_result = 2
     result_index = epochs_per_result
     for epoch in range(1, epoch_max + 1):
         print('Epoch: ', epoch, '/', epoch_max, sep='')

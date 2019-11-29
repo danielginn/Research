@@ -157,7 +157,7 @@ def xyz_error(y_true,y_pred):
     ztrue = y_true[:,2]
     xyz_error = K.sqrt(K.square(xtrue) + K.square(ytrue) +K.square(ztrue))
     #q_true = y_true[:,3:7]
-
+    print(y_true.shape)
     median_error = tfp.stats.percentile(xyz_error,q=50, interpolation='linear')
 
     return median_error
