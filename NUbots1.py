@@ -78,7 +78,7 @@ with tf.device('/device:GPU:0'):
     file1 = open("Results.txt", "w")
     # Base-line accuracy
     test_xyz_error, test_q_error = LocalisationNetwork.Test_epoch(dataset=dataset, scene_info=scene_info, datagen=datagen, model=global_pose_network,
-                                              quickTest=False)
+                                              quickTest=False, getPrediction=False)
     file1.write("0,,%s,,%s\n" % (test_xyz_error, test_q_error))
     file1.close()
     xs.append(0)
@@ -96,7 +96,7 @@ with tf.device('/device:GPU:0'):
         # time.sleep(1)
         if ((epoch % epochs_per_result) == 0):
             test_xyz_error, test_q_error = LocalisationNetwork.Test_epoch(dataset=dataset, scene_info=scene_info, datagen=datagen, model=global_pose_network,
-                                                      quickTest=False)
+                                                      quickTest=False, getPrediction=False)
             print("Testing: [test_xyz_error,test_q_error] = [", test_xyz_error, ", ", test_q_error, "]", sep='')
             file1 = open("Results.txt", "a")
             file1.write(
@@ -107,5 +107,9 @@ with tf.device('/device:GPU:0'):
             q_avg_error.append(test_q_error)
             result_index += epochs_per_result
             # update_graph(xs,xyz_avg_error, q_avg_error)
+
+        if (epoch == 10):
+            LocalisationNetwork.Test_epoch(dataset=dataset, scene_info=scene_info, datagen=datagen, model=global_pose_network,
+                                                      quickTest=False, getPrediction=True)
 
     print("Finished Successfully")

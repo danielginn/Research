@@ -155,10 +155,12 @@ def xyz_error(y_true,y_pred):
     xtrue = y_true[:,0]
     ytrue = y_true[:,1]
     ztrue = y_true[:,2]
-    xyz_error = K.sqrt(K.square(xtrue) + K.square(ytrue) +K.square(ztrue))
-    #q_true = y_true[:,3:7]
-    print(y_true.shape)
-    median_error = tfp.stats.percentile(xyz_error,q=50, interpolation='linear')
+    xpred = y_pred[:,0]
+    ypred = y_pred[:,1]
+    zpred = y_pred[:,2]
+    xyz_error = K.sqrt(K.square(xtrue-xpred) + K.square(ytrue-ypred) +K.square(ztrue-zpred))
+
+    median_error = tfp.stats.percentile(xyz_error,q=50, interpolation='midpoint')
 
     return median_error
 
@@ -202,7 +204,7 @@ def Train_epoch(dataset, scene_info, datagen, model, quickTrain):
             break
     return model, xyz_error_sum/num_scenes, q_error_sum/num_scenes
 
-def Test_epoch(dataset, scene_info, datagen, model, quickTest):
+def Test_epoch(dataset, scene_info, datagen, model, quickTest, getPrediction):
     xyz_error_sum = 0
     q_error_sum = 0
     num_scenes = 0
@@ -217,6 +219,12 @@ def Test_epoch(dataset, scene_info, datagen, model, quickTest):
             results = model.evaluate(x=x_test, y={'xyz': y_xyz_test, 'q': y_q_test}, verbose=0)
             xyz_error_sum += results[3]
             q_error_sum += results[4]
+            if (getPrediction):
+                [xyz_predictions, q_predictions] = model.predict(x_test)
+                np.savetxt("xyz_predictions.txt", xyz_predictions)
+                np.savetxt("q_predictions.txt", q_predictions)
+                np.savetxt("y_xyz_true.txt", y_xyz_test)
+                np.savetxt("y_q_true.txt", y_q_test)
         else: # single output
             y_test = np.zeros([len(x_test), 7])
             y_test[:, 0:3] = y_xyz_test
@@ -225,6 +233,10 @@ def Test_epoch(dataset, scene_info, datagen, model, quickTest):
             print(results)
             xyz_error_sum += 1 # false results. Need to remove
             q_error_sum += 1 # false results. Need to remove
+            if (getPrediction):
+                predictions = model.predict(x_test)
+                np.savetxt("y_pred.txt",predictions)
+                np.savetxt("y_true.txt",y_test)
         num_scenes += 1
         if (quickTest):
             break
