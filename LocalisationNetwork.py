@@ -1,15 +1,17 @@
 import sys
 import os
-from keras.preprocessing.image import load_img
+from tensorflow.keras.preprocessing.image import load_img
 from PIL import Image
 import numpy as np
-from keras.preprocessing.image import img_to_array
+from tensorflow.keras.preprocessing.image import img_to_array
 from scipy.spatial.transform import Rotation as R
 import json
-from keras.callbacks import CSVLogger
-import keras.backend as K
+from tensorflow.keras.callbacks import CSVLogger
+import tensorflow.keras.backend as K
 import tensorflow as tf
 import tensorflow_probability as tfp
+from time import time
+from tensorflow.python.keras.callbacks import TensorBoard
 
 # Name: loadImages
 # Inputs:
@@ -151,7 +153,7 @@ def crop_generator(batches, crop_length, isRandom):
     return batch_crops
 
 # Custom metric
-def xyz_error(y_true,y_pred):
+def median_xyz_error(y_true,y_pred):
     xtrue = y_true[:,0]
     ytrue = y_true[:,1]
     ztrue = y_true[:,2]
@@ -165,7 +167,7 @@ def xyz_error(y_true,y_pred):
     return median_error
 
 
-def Train_epoch(dataset, scene_info, datagen, model, quickTrain):
+def Train_epoch(dataset, scene_info, datagen, model, quickTrain, callbacks):
     xyz_error_sum = 0
     q_error_sum = 0
     num_scenes = 0
@@ -183,7 +185,7 @@ def Train_epoch(dataset, scene_info, datagen, model, quickTrain):
         csv_train_logger = CSVLogger(filename='training.log',append=True)
         if isinstance(model.output, list):
             print("Is a multiple output...assuming 2 outputs")
-            history = model.fit(x=x_train, y={'xyz': y_xyz_train, 'q': y_q_train}, batch_size=32, verbose=0, shuffle=True)
+            history = model.fit(x=x_train, y={'xyz': y_xyz_train, 'q': y_q_train}, batch_size=32, verbose=0, shuffle=True, callbacks=[callbacks])
             xyz_error_sum += history.history["xyz_mean_absolute_error"][0]
             q_error_sum += history.history["q_mean_absolute_error"][0]
         else:
@@ -193,18 +195,23 @@ def Train_epoch(dataset, scene_info, datagen, model, quickTrain):
             y_train = np.zeros([len(x_train),7])
             y_train[:,0:3] = y_xyz_train
             y_train[:,3:7] = y_q_train
-            history = model.fit(x=x_train, y=y_train, batch_size=32, verbose=0, shuffle=True)
+            history = model.fit(x=x_train, y=y_train, batch_size=32, verbose=0, shuffle=True, callbacks=[callbacks])
             print(history.history)
-            xyz_error_sum += history.history["xyz_error"][0] # These are incorrect results and must be removed
-            q_error_sum += history.history["xyz_error"][0] # These are incorrect results and must be removed
+            xyz_error_sum += history.history["median_xyz_error"][0] # These are incorrect results and must be removed
+            q_error_sum += history.history["median_xyz_error"][0] # These are incorrect results and must be removed
 
 
         num_scenes += 1
         if (quickTrain):
             break
-    return model, xyz_error_sum/num_scenes, q_error_sum/num_scenes
 
-def Test_epoch(dataset, scene_info, datagen, model, quickTest, getPrediction):
+    xyz_error_avg = xyz_error_sum/num_scenes
+    q_error_avg = q_error_sum/num_scenes
+    tf.summary.scalar('xyz_error_avg',xyz_error_avg)
+
+    return model, xyz_error_avg, q_error_avg
+
+def Test_epoch(dataset, scene_info, datagen, model, quickTest, getPrediction, callbacks):
     xyz_error_sum = 0
     q_error_sum = 0
     num_scenes = 0
@@ -216,7 +223,7 @@ def Test_epoch(dataset, scene_info, datagen, model, quickTest, getPrediction):
         x_test = crop_generator(x_test, 224, isRandom=False)
         csv_test_logger = CSVLogger(filename='testing.log', append=True)
         if isinstance(model.output, list): # multi outputs...assuming 2
-            results = model.evaluate(x=x_test, y={'xyz': y_xyz_test, 'q': y_q_test}, verbose=0)
+            results = model.evaluate(x=x_test, y={'xyz': y_xyz_test, 'q': y_q_test}, verbose=0, callbacks=[callbacks])
             xyz_error_sum += results[3]
             q_error_sum += results[4]
             if (getPrediction):
@@ -229,7 +236,7 @@ def Test_epoch(dataset, scene_info, datagen, model, quickTest, getPrediction):
             y_test = np.zeros([len(x_test), 7])
             y_test[:, 0:3] = y_xyz_test
             y_test[:, 3:7] = y_q_test
-            results = model.evaluate(x=x_test, y=y_test, verbose=0)
+            results = model.evaluate(x=x_test, y=y_test, verbose=0, callbacks=[callbacks])
             print(results)
             xyz_error_sum += 1 # false results. Need to remove
             q_error_sum += 1 # false results. Need to remove

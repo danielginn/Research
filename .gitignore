@@ -9,3 +9,5 @@ NoBallImages.txt
 Results.txt
 Results/
 training.log
+logs/
+tensorboard
