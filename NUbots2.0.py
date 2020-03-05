@@ -1,5 +1,6 @@
-import tensorflow as tf
 import os
+#os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'  # or any {'0', '1', '2'}
+import tensorflow as tf
 import numpy as np
 from tensorflow import keras
 from tensorflow.keras.applications import ResNet50
@@ -8,6 +9,9 @@ import ResNet50Modifications as ResNetMods
 import LocalisationNetwork
 import DatasetInfo
 import ProcessDataset
+#tf.get_logger().setLevel('INFO')
+#tf.autograph.set_verbosity(1)
+
 
 base_model = ResNet50(weights='imagenet', include_top=False, input_shape=(224,224,3))
 print("ResNet50 model loaded...")
@@ -20,8 +24,6 @@ global_pose_network = base_model
 global_pose_network.compile(optimizer=Adam(lr=1e-4,epsilon=1e-10),loss='mean_squared_error', metrics=['accuracy'])
 #global_pose_network.compile(optimizer=Adam(lr=1e-4,epsilon=1e-10),loss='mean_squared_error', metrics=[LocalisationNetwork.xyz_error])
 
-#dataset = '7scenes' # Can be: 7scenes, NUbotsSoccerField1, NUbotsSoccerField2
-#scene_info = DatasetInfo.GetDatasetInfo(dataset)
 
 ######################################################################
 ###############  Training  ###########################################
@@ -31,11 +33,16 @@ print('***** STARTING TRAINING *****')
 print('*****************************')
 
 list_ds = tf.data.Dataset.list_files("7scenes\\chess\\seq-01\\*.color.png", shuffle=False)
+
+for e in list_ds.take(1):
+    result = ProcessDataset.process_path(e)
 labeled_ds = list_ds.map(ProcessDataset.process_path, num_parallel_calls=tf.data.experimental.AUTOTUNE)
 
 train_ds = ProcessDataset.prepare_for_training(ds=labeled_ds, batch_size=32, cache='7scenes\\')
 
-image_batch, label_batch = next(iter(train_ds))
+global_pose_network.fit(x=train_ds, epochs=5, verbose=2, steps_per_epoch=31)
+
+#image_batch, label_batch = next(iter(train_ds))
 
 
 
