@@ -23,7 +23,7 @@ model.layers[2].set_weights([weights2,bias2])
 
 for layer in model.layers:
     layer.trainable = False
-model.compile(optimizer=Adam(lr=1e-4,epsilon=1e-10),loss='mean_squared_error', metrics=[CustomMethods.Mean_XYZ_Error(batch=3)])
+model.compile(optimizer=Adam(lr=1e-4,epsilon=1e-10),loss='mean_squared_error', metrics=[CustomMethods.Median_XYZ_Error(batch=3, array_size=6)])
 #model.summary()
 for layer in model.layers:
     layer.trainable = False
@@ -68,5 +68,6 @@ for i in range(0, 6):
     xyz_error_sum += xyz_errors[i]
 print("my calc of total xyz_avg_error:",xyz_error_sum/6)
 
-results1 = model.fit(x=x_test, y=y_true, batch_size=3, verbose=1, epochs=2, shuffle=False)
+#results1 = model.fit(x=x_test, y=y_true, batch_size=3, verbose=1, epochs=2, shuffle=False)
 results2 = model.evaluate(x=x_test, y=y_true, batch_size=3, steps=2, verbose=1)
+print(results2)
