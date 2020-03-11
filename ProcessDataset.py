@@ -40,7 +40,7 @@ def prepare_for_training(ds, batch_size=32, cache=True, shuffle_buffer_size=1000
 
   ds = ds.map(final_crop)
   print(ds)
-  ds = ds.shuffle(buffer_size=shuffle_buffer_size)
+  #ds = ds.shuffle(buffer_size=shuffle_buffer_size)
 
   # Repeat forever
   ds = ds.repeat()

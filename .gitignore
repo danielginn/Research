@@ -7,7 +7,7 @@ NUbotsDatasets/
 ListOfFiles.txt
 NoBallImages.txt
 Results.txt
-Results/
+Results/NU*
 training.log
 logs/
 tensorboard
