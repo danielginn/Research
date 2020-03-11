@@ -21,8 +21,12 @@ bias2 = np.array([0,0,0,0,0,0,0])
 model.layers[1].set_weights([weights1,bias1])
 model.layers[2].set_weights([weights2,bias2])
 
+for layer in model.layers:
+    layer.trainable = False
 model.compile(optimizer=Adam(lr=1e-4,epsilon=1e-10),loss='mean_squared_error', metrics=[CustomMethods.Mean_XYZ_Error(batch=3)])
 #model.summary()
+for layer in model.layers:
+    layer.trainable = False
 
 # Test inputs arbitrarily chosen
 x_test = np.array([(0.62, 0.47, -0.83, 0.14, -0.73),
@@ -64,4 +68,5 @@ for i in range(0, 6):
     xyz_error_sum += xyz_errors[i]
 print("my calc of total xyz_avg_error:",xyz_error_sum/6)
 
-results = model.evaluate(x=x_test, y=y_true, batch_size=3, steps=2, verbose=1)
+results1 = model.fit(x=x_test, y=y_true, batch_size=3, verbose=1, epochs=2, shuffle=False)
+results2 = model.evaluate(x=x_test, y=y_true, batch_size=3, steps=2, verbose=1)
