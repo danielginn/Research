@@ -23,7 +23,7 @@ model.layers[2].set_weights([weights2,bias2])
 
 for layer in model.layers:
     layer.trainable = False
-model.compile(optimizer=Adam(lr=1e-4,epsilon=1e-10),loss='mean_squared_error', metrics=[CustomMethods.Median_XYZ_Error(batch=3, array_size=6)])
+model.compile(optimizer=Adam(lr=1e-4,epsilon=1e-10),loss='mean_squared_error', metrics=[CustomMethods.Mean_XYZ_Error(batch=3)])
 #model.summary()
 for layer in model.layers:
     layer.trainable = False

@@ -54,7 +54,7 @@ def prepare_for_training(ds, batch_size=32, cache=True, shuffle_buffer_size=1000
 
 def final_crop(img, xyzq):
   img = tf.image.random_crop(img, [224, 224, 3])
-  xyzq = tf.reshape(xyzq, [7,1])
+  xyzq = tf.reshape(xyzq, [7])
   return img, xyzq
 
 def convert_string_to_xyzq(str):

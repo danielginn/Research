@@ -51,7 +51,7 @@ else:
 
 base_model = ResNetMods.additional_final_layers(base_model)
 global_pose_network = base_model
-global_pose_network.compile(optimizer=Adam(lr=1e-4,epsilon=1e-10),loss='mean_squared_error', metrics=[CustomMethods.Mean_XYZ_Error()])
+global_pose_network.compile(optimizer=Adam(lr=1e-4,epsilon=1e-10),loss='mean_squared_error', metrics=[CustomMethods.Mean_XYZ_Error(batch=32)])
 
 
 ######################################################################
@@ -73,7 +73,7 @@ print('***** STARTING TRAINING *****')
 print('*****************************')
 global_pose_network.fit(x=train_ds, epochs=30, verbose=2, steps_per_epoch=steps_per_epoch_train, validation_data=test_ds, validation_steps=steps_per_epoch_test, validation_freq=5)
 
-#image_batch, label_batch = next(iter(train_ds))
+
 
 
 
