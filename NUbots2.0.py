@@ -32,7 +32,7 @@ num_test_images = 0
 for f in list_test_ds:
     num_test_images += 1
 print("total test images:",num_test_images)
-steps_per_epoch_test = math.ceil(num_train_images/32)
+steps_per_epoch_test = math.ceil(num_test_images/32)
 
 ######################################################################
 ###############  Model  ##############################################
@@ -71,9 +71,13 @@ test_ds = ProcessDataset.prepare_for_training(ds=labeled_test_ds, batch_size=32,
 print('*****************************')
 print('***** STARTING TRAINING *****')
 print('*****************************')
-global_pose_network.fit(x=train_ds, epochs=30, verbose=2, steps_per_epoch=steps_per_epoch_train, validation_data=test_ds, validation_steps=steps_per_epoch_test, validation_freq=5)
-
-
+#global_pose_network.fit(x=train_ds, epochs=30, verbose=2, steps_per_epoch=steps_per_epoch_train, validation_data=test_ds, validation_steps=steps_per_epoch_test, validation_freq=5)
+global_pose_network.fit(x=train_ds, epochs=2, verbose=2, steps_per_epoch=steps_per_epoch_train)
+global_pose_network.evaluate(x=test_ds, verbose=2, steps=steps_per_epoch_test)
+global_pose_network.fit(x=train_ds, epochs=2, verbose=2, steps_per_epoch=steps_per_epoch_train, initial_epoch=3)
+global_pose_network.evaluate(x=test_ds, verbose=2, steps=steps_per_epoch_test)
+global_pose_network.fit(x=train_ds, epochs=2, verbose=2, steps_per_epoch=steps_per_epoch_train, initial_epoch=5)
+global_pose_network.evaluate(x=test_ds, verbose=2, steps=steps_per_epoch_test)
 
 
 
