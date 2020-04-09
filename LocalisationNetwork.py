@@ -25,7 +25,7 @@ import tensorflow_probability as tfp
 # - 'Unknown dataset': Triggers if dataset input was not one of the known dataset options
 def loadImages(dataset, data_purpose, scene_info):
 
-    if ((dataset == 'NUbotsSoccerField1') or (dataset == 'NUbotsSoccerField2')):
+    if (dataset == 'NUbotsField'):
         if (data_purpose == 'train'):
             numImages = scene_info.get('num_train_images')
         elif (data_purpose == 'test'):
@@ -39,10 +39,7 @@ def loadImages(dataset, data_purpose, scene_info):
         xyz = np.zeros((numImages, 3))
         q = np.zeros((numImages, 4))
         image_index = 0
-        if (dataset == 'NUbotsSoccerField1'):
-            path = "D:\\VLocNet++\\Research\\NUbotsDatasets\\NUbotsSoccerField1\\{}\\".format(data_purpose)
-        else:
-            path = "D:\\VLocNet++\\Research\\NUbotsDatasets\\NUbotsSoccerField2\\{}\\".format(data_purpose)
+        path = ".\\NUbotsField\\{}\\".format(data_purpose)
         print(path)
         for r, d, f in os.walk(path):
             for file in f:
@@ -56,9 +53,6 @@ def loadImages(dataset, data_purpose, scene_info):
                         json_data = json.load(f2)
                     xyz[image_index,:] = json_data['position']
                     q[image_index,:] = json_data['rotation']
-
-                    if json_data['tracking_valid'] == False:
-                        print("Tracking INVALID for ",json_filename)
 
                     image_index += 1
 
