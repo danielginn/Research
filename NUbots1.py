@@ -75,7 +75,7 @@ datagen = ImageDataGenerator(featurewise_center=False)
 xyz_avg_error = []
 q_avg_error = []
 xs = []
-file1 = open("Results.txt", "w")
+file1 = open(".\\Results\\Results.txt", "w")
 # Base-line accuracy
 test_xyz_error, test_q_error = LocalisationNetwork.Test_epoch(dataset=dataset, scene_info=scene_info, datagen=datagen, model=global_pose_network,
                                           quickTest=False, getPrediction=False)
