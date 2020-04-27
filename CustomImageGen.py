@@ -6,6 +6,7 @@ from keras.preprocessing.image import img_to_array
 from scipy.spatial.transform import Rotation as R
 from keras.preprocessing.image import ImageDataGenerator
 from PIL import Image
+import tensorflow as tf
 import glob
 import math
 
@@ -22,6 +23,32 @@ def xyz_error(y_true, y_pred):
     median_error = tfp.stats.percentile(xyz_error, q=50, interpolation='midpoint')
 
     return median_error
+
+
+def q_error(y_true, y_pred):
+    return tf_function(y_true, y_pred)
+
+
+@tf.function(input_signature=[tf.TensorSpec(shape=[32, 7], dtype=tf.float32), tf.TensorSpec(shape=[32, 7], dtype=tf.float32)])
+def tf_function(input1, input2):
+    y = tf.numpy_function(quat_diff, [input1, input2], tf.float32)
+    return y
+
+
+def quat_diff(y_true, y_pred):
+    R_true = R.from_quat(y_true[:, 3:7])
+    R_pred = R.from_quat(y_pred[:, 3:7])
+    R_diff = R_true.inv()*R_pred
+    q_diff = R_diff.as_quat()
+
+    lengths = np.sqrt(np.square(q_diff[:, 0]) + np.square(q_diff[:, 1]) + np.square(q_diff[:, 2]))
+    angles = np.degrees(2 * np.arctan2(lengths, q_diff[:, 3]))
+    for i in range(angles.shape[0]):
+        if angles[i] > 180:
+            angles[i] = 360 - angles[i]
+
+    median_error = tfp.stats.percentile(angles, q=50, interpolation='midpoint')
+    return K.cast(median_error, dtype='float32')
 
 
 def list_of_files(purpose):
@@ -107,7 +134,10 @@ def get_output(image_path):
 
 
 def image_generator(files, batch_size):
+    count = 1
     while True:
+        print(count)
+        count += 1
         #Select files (paths/indices) for the batch
         batch_paths = np.random.choice(files, batch_size)
         batch_input = []
