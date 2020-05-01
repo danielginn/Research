@@ -17,7 +17,13 @@ print("ResNet50 model loaded...")
 
 model = ResNetMods.additional_final_layers(model)
 
-model.compile(optimizer=Adam(lr=1e-4, epsilon=1e-10), loss='mean_squared_error', metrics=[CustomImageGen.q_error])
+losses = {"xyz_output": "mean_squared_error",
+          "q_output": "mean_squared_error"}
+
+metrics = {"xyz_output": CustomImageGen.xyz_error,
+           "q_output": CustomImageGen.q_error}
+
+model.compile(optimizer=Adam(lr=1e-4, epsilon=1e-10), loss=losses, metrics=metrics)
 #global_pose_network.summary()
 
 #####################################################################
@@ -35,7 +41,7 @@ file1 = open(".\\Results\\Results.txt", "w")
 results_train = model.fit_generator(generator=CustomImageGen.image_generator(x_train_files, batch_size), steps_per_epoch=train_SPE, epochs=1, verbose=2)
 results_test = model.evaluate_generator(generator=CustomImageGen.image_generator(x_test_files, batch_size), steps=test_SPE)
 epoch_counter = 0
-file1.write("%s,%s,%s\n" % (epoch_counter, results_train.history['q_error'], results_test[1]))
+file1.write("%s,%s,%s,%s,%s\n" % (epoch_counter, results_train.history['xyz_output_xyz_error'], results_test[3], results_train.history['q_output_q_error'], results_test[4]))
 file1.close()
 val_freq = 3
 for i in range(50):
@@ -46,7 +52,7 @@ for i in range(50):
     results_test = model.evaluate_generator(generator=CustomImageGen.image_generator(x_test_files, batch_size), steps=test_SPE)
     epoch_counter += val_freq
     file1 = open(".\\Results\\Results.txt", "a")
-    file1.write("%s,%s,%s\n" % (epoch_counter, results_train.history['q_error'][val_freq-1], results_test[1]))
+    file1.write("%s,%s,%s,%s,%s\n" % (epoch_counter, results_train.history['xyz_output_xyz_error'][val_freq-1], results_test[3], results_train.history['q_output_q_error'][val_freq-1], results_test[4]))
     file1.close()
     print(results_test)
 

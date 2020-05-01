@@ -29,15 +29,15 @@ def q_error(y_true, y_pred):
     return tf_function(y_true, y_pred)
 
 
-@tf.function(input_signature=[tf.TensorSpec(shape=[32, 7], dtype=tf.float32), tf.TensorSpec(shape=[32, 7], dtype=tf.float32)])
+@tf.function(input_signature=[tf.TensorSpec(shape=[32, 4], dtype=tf.float32), tf.TensorSpec(shape=[32, 4], dtype=tf.float32)])
 def tf_function(input1, input2):
     y = tf.numpy_function(quat_diff, [input1, input2], tf.float32)
     return y
 
 
 def quat_diff(y_true, y_pred):
-    R_true = R.from_quat(y_true[:, 3:7])
-    R_pred = R.from_quat(y_pred[:, 3:7])
+    R_true = R.from_quat(y_true)
+    R_pred = R.from_quat(y_pred)
     R_diff = R_true.inv()*R_pred
     q_diff = R_diff.as_quat()
 
@@ -46,8 +46,8 @@ def quat_diff(y_true, y_pred):
     for i in range(angles.shape[0]):
         if angles[i] > 180:
             angles[i] = 360 - angles[i]
-
-    median_error = tfp.stats.percentile(angles, q=50, interpolation='midpoint')
+    median_error = np.mean(angles)
+    #median_error = tfp.stats.percentile(angles, q=50, interpolation='midpoint')
     return K.cast(median_error, dtype='float32')
 
 
@@ -100,9 +100,8 @@ def get_input(path):
     return cropped_image
 
 
-def get_output(image_path):
+def get_outputs(image_path):
     if np.char.startswith(image_path, ".\\7scenes"):
-        xyzq = np.zeros(7)
         pose_path = image_path[:-9] + "pose.txt"
         file_handle = open(pose_path, 'r')
 
@@ -116,13 +115,13 @@ def get_output(image_path):
             homogeneous_transform[j, :] = homogeneous_transform_list[j]
 
         # Extract xyz from homogeneous Transform
-        xyzq[0:3] = homogeneous_transform[0:3, 3]
+        xyz = homogeneous_transform[0:3, 3]
         # Extract rotation from homogeneous Transform
         r = R.from_dcm(homogeneous_transform[0:3, 0:3])
-        xyzq[3:7] = r.as_quat()
+        q = r.as_quat()
 
         file_handle.close()
-        return xyzq
+        return xyz, q
 
     elif np.char.startswith(image_path, ".\\NUbotsField"):
         pose_path = image_path[:-3] + "json"
@@ -130,7 +129,7 @@ def get_output(image_path):
     else:
         print("Unrecognised dataset")
 
-    return 0
+    return 0, 0
 
 
 def image_generator(files, batch_size):
@@ -141,20 +140,22 @@ def image_generator(files, batch_size):
         #Select files (paths/indices) for the batch
         batch_paths = np.random.choice(files, batch_size)
         batch_input = []
-        batch_output = []
+        batch_xyz_output = []
+        batch_q_output = []
 
         # Read in each input, perform preprocessing and get labels
         for input_path in batch_paths:
             input = get_input(input_path)
-            output = get_output(input_path)
+            xyz_output, q_output = get_outputs(input_path)
 
             batch_input += [input]
-            batch_output += [output]
+            batch_xyz_output += [xyz_output]
+            batch_q_output += [q_output]
 
         # Return a tuple of (input, output) to feed the network
         datagen = ImageDataGenerator()
 
         batch_x = np.array(batch_input)
         batch_x_st = datagen.standardize(batch_x)
-        batch_y = np.array(batch_output)
+        batch_y = {"xyz_output": np.array(batch_xyz_output), "q_output": np.array(batch_q_output)}
         yield (batch_x_st, batch_y)
