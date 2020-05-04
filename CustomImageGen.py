@@ -2,13 +2,13 @@ import keras.backend as K
 import tensorflow_probability as tfp
 import numpy as np
 from keras.preprocessing.image import load_img
+from keras.callbacks import Callback
 from keras.preprocessing.image import img_to_array
 from scipy.spatial.transform import Rotation as R
 from keras.preprocessing.image import ImageDataGenerator
 from PIL import Image
 import tensorflow as tf
 import glob
-import math
 
 
 def xyz_error(y_true, y_pred):

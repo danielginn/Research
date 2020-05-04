@@ -1,6 +1,7 @@
 from keras.applications import ResNet50
 import ResNet50Modifications as ResNetMods
 import CustomImageGen
+from CustomImageGen import image_generator as img_gen
 from keras.optimizers import Adam
 import math
 import tensorflow as tf
@@ -21,7 +22,7 @@ losses = {"xyz_output": "mean_squared_error",
           "q_output": "mean_squared_error"}
 
 metrics = {"xyz_output": CustomImageGen.xyz_error,
-           "q_output": CustomImageGen.q_error}
+           "q_output": CustomImageGen.xyz_error}
 
 model.compile(optimizer=Adam(lr=1e-4, epsilon=1e-10), loss=losses, metrics=metrics)
 #global_pose_network.summary()
