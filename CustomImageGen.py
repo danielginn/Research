@@ -11,6 +11,9 @@ import tensorflow as tf
 import glob
 
 
+
+
+
 def xyz_error(y_true, y_pred):
     xtrue = y_true[:, 0]
     ytrue = y_true[:, 1]
@@ -100,8 +103,9 @@ def get_input(path):
     return cropped_image
 
 
-def get_outputs(image_path):
+def get_output(image_path):
     if np.char.startswith(image_path, ".\\7scenes"):
+        xyzq = np.zeros(7)
         pose_path = image_path[:-9] + "pose.txt"
         file_handle = open(pose_path, 'r')
 
@@ -115,13 +119,13 @@ def get_outputs(image_path):
             homogeneous_transform[j, :] = homogeneous_transform_list[j]
 
         # Extract xyz from homogeneous Transform
-        xyz = homogeneous_transform[0:3, 3]
+        xyzq[0:3] = homogeneous_transform[0:3, 3]
         # Extract rotation from homogeneous Transform
         r = R.from_dcm(homogeneous_transform[0:3, 0:3])
-        q = r.as_quat()
+        xyzq[3:7] = r.as_quat()
 
         file_handle.close()
-        return xyz, q
+        return xyzq
 
     elif np.char.startswith(image_path, ".\\NUbotsField"):
         pose_path = image_path[:-3] + "json"
@@ -129,7 +133,7 @@ def get_outputs(image_path):
     else:
         print("Unrecognised dataset")
 
-    return 0, 0
+    return 0
 
 
 def image_generator(files, batch_size):
@@ -140,22 +144,20 @@ def image_generator(files, batch_size):
         #Select files (paths/indices) for the batch
         batch_paths = np.random.choice(files, batch_size)
         batch_input = []
-        batch_xyz_output = []
-        batch_q_output = []
+        batch_output = []
 
         # Read in each input, perform preprocessing and get labels
         for input_path in batch_paths:
             input = get_input(input_path)
-            xyz_output, q_output = get_outputs(input_path)
+            output = get_output(input_path)
 
             batch_input += [input]
-            batch_xyz_output += [xyz_output]
-            batch_q_output += [q_output]
+            batch_output += [output]
 
         # Return a tuple of (input, output) to feed the network
         datagen = ImageDataGenerator()
 
         batch_x = np.array(batch_input)
         batch_x_st = datagen.standardize(batch_x)
-        batch_y = {"xyz_output": np.array(batch_xyz_output), "q_output": np.array(batch_q_output)}
+        batch_y = np.array(batch_output)
         yield (batch_x_st, batch_y)
