@@ -11,17 +11,27 @@ import tensorflow as tf
 import glob
 
 
+def geo_loss(y_true, y_pred):
+    x_diff = y_true[:, 0] - y_pred[:, 0]
+    y_diff = y_true[:, 1] - y_pred[:, 1]
+    z_diff = y_true[:, 2] - y_pred[:, 2]
 
+    q1_diff = y_true[:, 3] - y_pred[:, 3]
+    q2_diff = y_true[:, 4] - y_pred[:, 4]
+    q3_diff = y_true[:, 5] - y_pred[:, 5]
+    q4_diff = y_true[:, 6] - y_pred[:, 6]
 
+    L_x = K.sqrt(K.square(x_diff) + K.square(y_diff) + K.square(z_diff))
+    L_q = K.sqrt(K.square(q1_diff) + K.square(q2_diff) + K.square(q3_diff) + K.square(q4_diff))
+
+    B = 1
+    return L_x + B*L_q
 
 def xyz_error(y_true, y_pred):
-    xtrue = y_true[:, 0]
-    ytrue = y_true[:, 1]
-    ztrue = y_true[:, 2]
-    xpred = y_pred[:, 0]
-    ypred = y_pred[:, 1]
-    zpred = y_pred[:, 2]
-    xyz_error = K.sqrt(K.square(xtrue-xpred) + K.square(ytrue-ypred) + K.square(ztrue-zpred))
+    x_diff = y_true[:, 0] - y_pred[:, 0]
+    y_diff = y_true[:, 1] - y_pred[:, 1]
+    z_diff = y_true[:, 2] - y_pred[:, 2]
+    xyz_error = K.sqrt(K.square(x_diff) + K.square(y_diff) + K.square(z_diff))
 
     median_error = tfp.stats.percentile(xyz_error, q=50, interpolation='midpoint')
 
@@ -137,12 +147,15 @@ def get_output(image_path):
 
 
 def image_generator(files, batch_size):
-    count = 1
+    i = 0
     while True:
-        print(count)
-        count += 1
+        batch_start = max(((i+batch_size) % len(files))-batch_size, 0) # This makes sure a batch too close to the end is not chosen
+        batch_end = batch_start + batch_size
+        i += batch_size
+
         #Select files (paths/indices) for the batch
-        batch_paths = np.random.choice(files, batch_size)
+        #batch_paths = np.random.choice(files, batch_size)
+        batch_paths = np.array(files[batch_start:batch_end])
         batch_input = []
         batch_output = []
 
