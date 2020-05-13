@@ -1,13 +1,21 @@
 from keras.models import Model
-from keras.layers import Dense, GlobalAveragePooling2D
+from keras.layers import Dense, GlobalAveragePooling2D, Dropout
+
+
 def additional_final_layers(model):
     x = model.output
     x = GlobalAveragePooling2D()(x)
     x = Dense(1024, name='fc1')(x)
+    x = Dropout(0.2)(x)
     xyzq = Dense(7, name='xyzq_output')(x)
     #q = Dense(4, name='q_output')(x)
 
     return Model(inputs=model.inputs, outputs=xyzq)
+
+
+def feedback_loop(model):
+
+
 
 def change_activation_function(model):
     model.layers[4].activation = 'elu'   # Activation_1

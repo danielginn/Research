@@ -16,10 +16,11 @@ def geo_loss(y_true, y_pred):
     y_diff = y_true[:, 1] - y_pred[:, 1]
     z_diff = y_true[:, 2] - y_pred[:, 2]
 
-    q1_diff = y_true[:, 3] - y_pred[:, 3]
-    q2_diff = y_true[:, 4] - y_pred[:, 4]
-    q3_diff = y_true[:, 5] - y_pred[:, 5]
-    q4_diff = y_true[:, 6] - y_pred[:, 6]
+    q_pred = K.l2_normalize(y_pred[:, 3:7], axis=1)
+    q1_diff = y_true[:, 3] - q_pred[:, 0]
+    q2_diff = y_true[:, 4] - q_pred[:, 1]
+    q3_diff = y_true[:, 5] - q_pred[:, 2]
+    q4_diff = y_true[:, 6] - q_pred[:, 3]
 
     L_x = K.sqrt(K.square(x_diff) + K.square(y_diff) + K.square(z_diff))
     L_q = K.sqrt(K.square(q1_diff) + K.square(q2_diff) + K.square(q3_diff) + K.square(q4_diff))
@@ -158,7 +159,6 @@ def image_generator(files, batch_size):
         batch_paths = np.array(files[batch_start:batch_end])
         batch_input = []
         batch_output = []
-
         # Read in each input, perform preprocessing and get labels
         for input_path in batch_paths:
             input = get_input(input_path)
