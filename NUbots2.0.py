@@ -18,9 +18,9 @@ print("ResNet50 model loaded...")
 
 model = ResNetMods.change_activation_function(model)
 model = ResNetMods.additional_final_layers(model)
-
+#model = ResNetMods.feedback_loop(model)
 model.compile(optimizer=Adam(lr=1e-4, epsilon=1e-10), loss=CustomImageGen.geo_loss, metrics=[CustomImageGen.xyz_error])
-#global_pose_network.summary()
+#model.summary()
 
 #####################################################################
 # Find Dataset
@@ -34,25 +34,32 @@ train_SPE = int(math.floor(len(x_train_files)/batch_size))
 test_SPE = int(math.floor(len(x_test_files)/batch_size))
 
 file1 = open(".\\Results\\Results.txt", "w")
-results_train = model.fit_generator(generator=CustomImageGen.image_generator(x_train_files, batch_size), steps_per_epoch=train_SPE, epochs=1, verbose=2)
-results_test = model.evaluate_generator(generator=CustomImageGen.image_generator(x_test_files, batch_size), steps=test_SPE)
-epoch_counter = 0
+mycallback = CustomImageGen.MyMetrics(CustomImageGen.image_generator(x_test_files, batch_size, feedback_loop=False, is_random=False, steps=test_SPE), test_SPE, batch_size)
+results_train = model.fit(x=CustomImageGen.image_generator(x_train_files, batch_size, False, True, train_SPE), steps_per_epoch=train_SPE, epochs=1, verbose=2, validation_data=CustomImageGen.image_generator(x_test_files, batch_size, False, False, test_SPE), validation_steps=test_SPE, validation_freq=1, callbacks=[mycallback])
 print(results_train.history)
-print(results_test)
-file1.write("%s,%s,%s\n" % (epoch_counter, results_train.history['xyz_error'][0], results_test[1]))
+print("mycallback:")
+print(mycallback.get_median())
+epoch_counter = 0
+file1.write("%s,%s,%s\n" % (epoch_counter, results_train.history["xyz_error"][0], mycallback.get_median()))
 file1.close()
 val_freq = 3
-for i in range(50):
 
+for i in range(30):
     print("train: Round " + str(i))
-    results_train = model.fit_generator(generator=CustomImageGen.image_generator(x_train_files, batch_size), steps_per_epoch=train_SPE, epochs=val_freq, verbose=2)
+    results_train = model.fit(x=CustomImageGen.image_generator(x_train_files, batch_size, False, True, train_SPE), steps_per_epoch=train_SPE, epochs=val_freq, verbose=2, validation_data=CustomImageGen.image_generator(x_test_files, batch_size, False, False, test_SPE), validation_steps=test_SPE, validation_freq=1, callbacks=[mycallback])
+    if i == 24:
+        model.save_weights('my_weights_24')
+    if i == 27:
+        model.save_weights('my_weights_27')
+    if i == 30:
+        model.save_weights('my_weights_30')
     print("test:")
-    results_test = model.evaluate_generator(generator=CustomImageGen.image_generator(x_test_files, batch_size), steps=test_SPE)
+    print(mycallback.get_median())
+    print(mycallback.get_outliers())
     epoch_counter += val_freq
     file1 = open(".\\Results\\Results.txt", "a")
-    file1.write("%s,%s,%s\n" % (epoch_counter, results_train.history['xyz_error'][val_freq-1], results_test[1]))
+    file1.write("%s,%s,%s\n" % (epoch_counter, results_train.history["xyz_error"][0], mycallback.get_median()))
     file1.close()
-    print(results_test)
 
 
 

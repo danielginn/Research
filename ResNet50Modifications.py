@@ -1,21 +1,47 @@
 from keras.models import Model
-from keras.layers import Dense, GlobalAveragePooling2D, Dropout
+from keras.layers import Dense, GlobalAveragePooling2D, Dropout, Lambda, Concatenate, Input, Reshape, Conv2D
+import keras.backend as K
 
+def norm_layer(tensor):
+    return K.l2_normalize(tensor)
 
 def additional_final_layers(model):
     x = model.output
     x = GlobalAveragePooling2D()(x)
     x = Dense(1024, name='fc1')(x)
     x = Dropout(0.2)(x)
-    xyzq = Dense(7, name='xyzq_output')(x)
+    xyz = Dense(3)(x)
+    q = Dense(4)(x)
+    q = Lambda(norm_layer)(q)
+    xyzq = Concatenate(axis=1, name='xyzq_output')([xyz, q])
+    #xyzq = Dense(7, name='xyzq_output')(x)
     #q = Dense(4, name='q_output')(x)
 
     return Model(inputs=model.inputs, outputs=xyzq)
 
 
 def feedback_loop(model):
+    res4output = model.layers[142].output
+    input2 = Input(shape=(7,))
+    x = Dense(14*14*1024)(input2)
+    x = Dropout(0.2)(x)
+    x = Reshape((14, 14, 1024))(x)
+    res4output = Concatenate()([res4output, x])
 
+    x = Conv2D(filters=512, kernel_size=(1,1), strides=(2,2), kernel_initializer="VarianceScaling")(res4output)
 
+    new_model = Model(inputs=[model.input, input2], outputs=x)
+
+    #x = model.layers[144](x)
+    #x = model.layers[145](x)
+    #x = model.layers[146](x)
+    #x = model.layers[147](x)
+    #x = model.layers[148](x)
+    #x = model.layers[149](x)
+    #for i in range(143,170):
+    #    print(model.layers[i].name)
+
+    return new_model
 
 def change_activation_function(model):
     model.layers[4].activation = 'elu'   # Activation_1
