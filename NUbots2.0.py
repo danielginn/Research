@@ -4,6 +4,7 @@ import CustomImageGen
 from CustomImageGen import image_generator as img_gen
 from keras.optimizers import Adam
 import math
+import random
 import tensorflow as tf
 from keras.preprocessing.image import ImageDataGenerator
 
@@ -20,12 +21,18 @@ model = ResNetMods.change_activation_function(model)
 model = ResNetMods.additional_final_layers(model)
 #model = ResNetMods.feedback_loop(model)
 model.compile(optimizer=Adam(lr=1e-4, epsilon=1e-10), loss=CustomImageGen.geo_loss, metrics=[CustomImageGen.xyz_error])
-#model.summary()
+model.summary()
 
 #####################################################################
 # Find Dataset
-x_train_files = CustomImageGen.list_of_files("train")
-x_test_files = CustomImageGen.list_of_files("test")
+x_train_files = CustomImageGen.list_of_files("NUbots","test")
+x_test_files = CustomImageGen.list_of_files("NUbots","train")
+#combined_files = x_train_files + x_test_files
+#random.shuffle(combined_files)
+#validation_split_ratio = 0.7
+#validation_split_point = math.floor(len(combined_files)*validation_split_ratio)
+#x_train_files = combined_files[0:validation_split_point]
+#x_test_files = combined_files[validation_split_point:]
 
 #####################################################################
 # Train
@@ -44,18 +51,18 @@ file1.write("%s,%s,%s\n" % (epoch_counter, results_train.history["xyz_error"][0]
 file1.close()
 val_freq = 3
 
-for i in range(30):
+for i in range(26):
     print("train: Round " + str(i))
     results_train = model.fit(x=CustomImageGen.image_generator(x_train_files, batch_size, False, True, train_SPE), steps_per_epoch=train_SPE, epochs=val_freq, verbose=2, validation_data=CustomImageGen.image_generator(x_test_files, batch_size, False, False, test_SPE), validation_steps=test_SPE, validation_freq=1, callbacks=[mycallback])
-    if i == 24:
-        model.save_weights('my_weights_24')
-    if i == 27:
-        model.save_weights('my_weights_27')
-    if i == 30:
-        model.save_weights('my_weights_30')
     print("test:")
     print(mycallback.get_median())
-    print(mycallback.get_outliers())
+    #print(mycallback.get_outliers())
+    if i == 15:
+        model.save_weights('my_weights_NU15')
+    if i == 20:
+        model.save_weights('my_weights_NU20')
+    if i == 25:
+        model.save_weights('my_weights_NU25')
     epoch_counter += val_freq
     file1 = open(".\\Results\\Results.txt", "a")
     file1.write("%s,%s,%s\n" % (epoch_counter, results_train.history["xyz_error"][0], mycallback.get_median()))

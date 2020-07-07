@@ -10,6 +10,7 @@ from keras.preprocessing.image import ImageDataGenerator
 from PIL import Image
 import tensorflow as tf
 import glob
+import json
 
 
 class MyMetrics(Callback):
@@ -117,10 +118,11 @@ def quat_diff(y_true, y_pred):
     return K.cast(median_error, dtype='float32')
 
 
-def list_of_files(folder,purpose):
-    #return [f for f in glob.glob(".\\7scenes\\*\\" + purpose + "\\*\\*.color.png")]
-    #return [f for f in glob.glob(".\\7scenes\\"+ folder +"\\" + purpose + "\\*\\*.color.png")]
-    return [f for f in glob.glob(".\\7scenes\\redkitchen\\" + purpose + "\\" + folder + "\\*.color.png")]
+def list_of_files(dataset, purpose):
+    if dataset == "NUbots":
+        return [f for f in glob.glob(".\\NUbotsField\\"+purpose+"\\*.jpg")]
+    else:
+        return [f for f in glob.glob(".\\7scenes\\*\\" + purpose + "\\*\\*.color.png")]
 
 
 def center_crop(img, crop_size):
@@ -203,30 +205,19 @@ def get_output(image_path):
         r = R.from_dcm(homogeneous_transform[0:3, 0:3])
         xyzq[3:7] = r.as_quat()
 
-        #if np.char.startswith(image_path, ".\\7scenes\\c"):
-        #    xyzq[7] = 100000
-        #elif np.char.startswith(image_path, ".\\7scenes\\f"):
-        #    xyzq[7] = 200000
-        #elif np.char.startswith(image_path, ".\\7scenes\\h"):
-        #    xyzq[7] = 300000
-        #elif np.char.startswith(image_path, ".\\7scenes\\o"):
-        #    xyzq[7] = 400000
-        #elif np.char.startswith(image_path, ".\\7scenes\\p"):
-        #    xyzq[7] = 500000
-        #elif np.char.startswith(image_path, ".\\7scenes\\r"):
-        #    xyzq[7] = 600000
-        #elif np.char.startswith(image_path, ".\\7scenes\\s"):
-        #    xyzq[7] = 700000
-
-        #xyzq[7] += int(image_path[-25:-23])*1000
-        #xyzq[7] += int(image_path[-13:-10])
-
         file_handle.close()
         return xyzq
 
     elif np.char.startswith(image_path, ".\\NUbotsField"):
-        pose_path = image_path[:-3] + "json"
+        json_filename = image_path[:-3] + "json"
+        xyzq = np.zeros(7)
 
+        with open(json_filename) as f2:
+            json_data = json.load(f2)
+        xyzq[0:3] = json_data['position']
+        xyzq[3:7] = json_data['rotation']
+        #print(xyzq)
+        return xyzq
     else:
         print("Unrecognised dataset")
 
