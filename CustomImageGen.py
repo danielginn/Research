@@ -11,6 +11,8 @@ from PIL import Image
 import tensorflow as tf
 import glob
 import json
+import math
+import random
 
 
 class MyMetrics(Callback):
@@ -122,7 +124,8 @@ def list_of_files(dataset, purpose):
     if dataset == "NUbots":
         return [f for f in glob.glob(".\\NUbotsField\\"+purpose+"\\*.jpg")]
     else:
-        return [f for f in glob.glob(".\\7scenes\\*\\" + purpose + "\\*\\*.color.png")]
+        #return [f for f in glob.glob(".\\7scenes\\*\\" + purpose + "\\*\\*.color.png")]
+        return [f for f in glob.glob(".\\7scenes\\redkitchen\\" + purpose + "\\*\\*.color.png")]
 
 
 def center_crop(img, crop_size):
@@ -166,6 +169,17 @@ def get_input(path):
         img_resized = img_full.resize((int(round(height * 1.25)), int(round(height))), Image.ANTIALIAS)
         img_np = img_to_array(img_resized)
         cropped_image = crop_generator(img_np, 224, isRandom=False)
+
+        #noise
+        #obscure_pcnt = 0.05
+        #long_dim = round(math.sqrt(50176 * obscure_pcnt) * 1.414)
+        #short_dim = round(long_dim / 2)
+        #rand_hor = random.randint(0, 224 - short_dim)
+        #rand_ver = 112-short_dim
+        #for m in range(rand_ver, rand_ver + long_dim):
+        #    for n in range(rand_hor, rand_hor + short_dim):
+        #        for c in range(3):
+        #            cropped_image[m, n, c] = 0
 
     return cropped_image
 

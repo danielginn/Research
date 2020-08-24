@@ -25,8 +25,8 @@ model.summary()
 
 #####################################################################
 # Find Dataset
-x_train_files = CustomImageGen.list_of_files("NUbots","test")
-x_test_files = CustomImageGen.list_of_files("NUbots","train")
+x_train_files = CustomImageGen.list_of_files("NUbots","train")
+x_test_files = CustomImageGen.list_of_files("NUbots","test")
 #combined_files = x_train_files + x_test_files
 #random.shuffle(combined_files)
 #validation_split_ratio = 0.7
@@ -57,12 +57,12 @@ for i in range(26):
     print("test:")
     print(mycallback.get_median())
     #print(mycallback.get_outliers())
-    if i == 15:
-        model.save_weights('my_weights_NU15')
-    if i == 20:
-        model.save_weights('my_weights_NU20')
+    if i == 23:
+        model.save_weights('my_weights_Res3_NU23')
+    if i == 24:
+        model.save_weights('my_weights_Res3_NU24')
     if i == 25:
-        model.save_weights('my_weights_NU25')
+        model.save_weights('my_weights_Res3_NU25')
     epoch_counter += val_freq
     file1 = open(".\\Results\\Results.txt", "a")
     file1.write("%s,%s,%s\n" % (epoch_counter, results_train.history["xyz_error"][0], mycallback.get_median()))

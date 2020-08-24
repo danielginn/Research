@@ -6,7 +6,8 @@ def norm_layer(tensor):
     return K.l2_normalize(tensor)
 
 def additional_final_layers(model):
-    x = model.output
+    #x = model.output
+    x = model.get_layer(name='activation_22').output
     x = GlobalAveragePooling2D()(x)
     x = Dense(1024, name='fc1')(x)
     x = Dropout(0.2)(x)
