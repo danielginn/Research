@@ -122,10 +122,10 @@ def quat_diff(y_true, y_pred):
 
 def list_of_files(dataset, purpose):
     if dataset == "NUbots":
-        return [f for f in glob.glob(".\\NUbotsField\\"+purpose+"\\*.jpg")]
+        return [f for f in glob.glob(".\\NUbotsField\\"+purpose+"\\*\\*.jpg")]
     else:
-        #return [f for f in glob.glob(".\\7scenes\\*\\" + purpose + "\\*\\*.color.png")]
-        return [f for f in glob.glob(".\\7scenes\\redkitchen\\" + purpose + "\\*\\*.color.png")]
+        return [f for f in glob.glob(".\\7scenes\\*\\" + purpose + "\\*\\*.color.png")]
+
 
 
 def center_crop(img, crop_size):
