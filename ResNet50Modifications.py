@@ -7,7 +7,7 @@ def norm_layer(tensor):
 
 def additional_final_layers(model):
     #x = model.output
-    x = model.get_layer(name='activation_49').output
+    x = model.get_layer(name='activation_49').output # activation_22/activation_49
     x = GlobalAveragePooling2D()(x)
     x = Dense(1024, name='fc1')(x)
     x = Dropout(0.2)(x)

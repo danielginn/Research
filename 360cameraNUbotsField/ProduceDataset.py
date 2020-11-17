@@ -3,13 +3,13 @@ import math
 import numpy as np
 import json
 
-image = cv2.imread(".\\dataset2\\P1.JPG", cv2.IMREAD_COLOR)
+image = cv2.imread(".\\dataset4\\01.JPG", cv2.IMREAD_COLOR)
 height, width, channels = image.shape
 
 print("height: " + str(height))
 print("width: " + str(width))
 
-cx = 2681 #P1
+cx = 3294 #P1
 #cx = 2632 #P2
 
 radius = 0.5*width/math.pi
@@ -28,6 +28,7 @@ centre_crop = np.zeros([672, 672, 3])
 x = x_start
 deg = -steps_left / 5
 while (x < width):
+    centre_crop = np.zeros([672, 672, 3])
     if (x < (width - 672)):
         centre_crop = image[cy-336:cy+336, x:x+672, :]
     else:
