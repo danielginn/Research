@@ -1,20 +1,10 @@
-import numpy as np
+import CustomImageGen
 
-
-array = np.zeros(20)
-copy = np.zeros(10)
-array_width = 20
-copy_width = 10
-
-for i in range(20):
-    array[i] = i
-
-x = 15
-
-for x in range(15,20):
-    diff = array_width - x
-    print("diff: " + str(diff))
-    copy[0:diff] = array[x:array_width]
-    copy[diff:copy_width] = array[0:copy_width-diff]
-
-print(copy)
+x_train_folders = CustomImageGen.list_of_folders("train",5)
+x_test_folders = CustomImageGen.list_of_folders("test",5)
+print(len(x_train_folders))
+print(len(x_test_folders))
+x_train_files = CustomImageGen.list_of_files("NUbots360","train",folders=x_train_folders)
+x_test_files = CustomImageGen.list_of_files("NUbots360","test",folders=x_test_folders)
+print(len(x_train_files))
+print(len(x_test_files))

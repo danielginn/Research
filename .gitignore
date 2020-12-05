@@ -8,8 +8,9 @@ NUbotsDatasets/
 ListOfFiles.txt
 NoBallImages.txt
 Results.txt
-Results/
 training.log
 my_weights_*
 360cameraNUbotsField/
 trail360.JPG
+last_weights
+best_model

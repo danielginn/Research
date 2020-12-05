@@ -25,8 +25,10 @@ model.summary()
 
 #####################################################################
 # Find Dataset
-x_train_files = CustomImageGen.list_of_files("NUbots","Full\\24Locations-L23")
-x_test_files = CustomImageGen.list_of_files("NUbots","Full\\1Location-L23")
+x_train_folders = CustomImageGen.list_of_folders("train",1)
+x_test_folders = CustomImageGen.list_of_folders("test",1)
+x_train_files = CustomImageGen.list_of_files("NUbots360","train",folders=x_train_folders)
+x_test_files = CustomImageGen.list_of_files("NUbots360","test",folders=x_test_folders)
 
 #####################################################################
 # Train
@@ -49,18 +51,25 @@ for i in range(26):
     print("train: Round " + str(i))
     results_train = model.fit(x=CustomImageGen.image_generator(x_train_files, batch_size, False, True, train_SPE), steps_per_epoch=train_SPE, epochs=val_freq, verbose=2, validation_data=CustomImageGen.image_generator(x_test_files, batch_size, False, False, test_SPE), validation_steps=test_SPE, validation_freq=1, callbacks=[mycallback])
     print("test:")
-    print(mycallback.get_median())
-    #print(mycallback.get_outliers())
+    median = mycallback.get_median()
+    print(median)
     if i == 23:
-        model.save_weights('my_weights_Res5_NU23')
+        model.save_weights('my_weights_Res3_NU23')
     if i == 24:
-        model.save_weights('my_weights_Res5_NU24')
+        model.save_weights('my_weights_Res3_NU24')
     if i == 25:
-        model.save_weights('my_weights_Res5_NU25')
+        model.save_weights('my_weights_Res3_NU25')
+
+    if (i == 16) or ((i >= 17) and (median < best_median)):
+        best_median = median
+        best_median_i = i
+        model.save_weights('best_model')
+
     epoch_counter += val_freq
     file1 = open(".\\Results\\Results.txt", "a")
     file1.write("%s,%s,%s\n" % (epoch_counter, results_train.history["xyz_error"][0], mycallback.get_median()))
     file1.close()
+    print("Best weights at: " + str(i))
 
 
 

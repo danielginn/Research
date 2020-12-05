@@ -119,12 +119,54 @@ def quat_diff(y_true, y_pred):
     #median_error = tfp.stats.percentile(angles, q=50, interpolation='midpoint')
     return K.cast(median_error, dtype='float32')
 
+def list_of_folders(purpose,exclude):
+    list = []
+    if purpose == "train":
+        for i in range(49):
+            if i+1 != exclude:
+                list.append(".\\360cameraNUbotsField\\dataset4\\" + str(i+1).zfill(2) + "\\")
 
-def list_of_files(dataset, purpose):
+    else:
+        list.append(".\\360cameraNUbotsField\\dataset4\\" + str(exclude).zfill(2) + "\\")
+    return list
+
+def list_of_folders2(purpose):
+    list = []
+    if purpose == "train":
+        i = 1
+        for j in range(3):
+            for k in range(7):
+                list.append(".\\360cameraNUbotsField\\dataset4\\" + str(i).zfill(2) + "\\")
+                i += 1
+
+            for k in range(4):
+                list.append(".\\360cameraNUbotsField\\dataset4\\" + str(i).zfill(2) + "\\")
+                i += 2
+            i -= 1
+
+        for k in range(7):
+            list.append(".\\360cameraNUbotsField\\dataset4\\" + str(i).zfill(2) + "\\")
+            i += 1
+    else:
+        i = 9
+        for j in range(3):
+            for k in range(3):
+                list.append(".\\360cameraNUbotsField\\dataset4\\" + str(i).zfill(2) + "\\")
+                i += 2
+            i += 8
+    return list
+
+def list_of_files(dataset, purpose, folders):
     if dataset == "NUbots":
         return [f for f in glob.glob(".\\NUbotsField\\"+purpose+"\\*\\*.jpg")]
-    else:
+    elif dataset == "7scenes":
         return [f for f in glob.glob(".\\7scenes\\*\\" + purpose + "\\*\\*.color.png")]
+    else:
+        list = []
+        for f in folders:
+            for i in range(1799):
+                list.append(f + str(i).zfill(4) + ".JPG")
+        return list
 
 
 
@@ -170,16 +212,8 @@ def get_input(path):
         img_np = img_to_array(img_resized)
         cropped_image = crop_generator(img_np, 224, isRandom=False)
 
-        #noise
-        #obscure_pcnt = 0.05
-        #long_dim = round(math.sqrt(50176 * obscure_pcnt) * 1.414)
-        #short_dim = round(long_dim / 2)
-        #rand_hor = random.randint(0, 224 - short_dim)
-        #rand_ver = 112-short_dim
-        #for m in range(rand_ver, rand_ver + long_dim):
-        #    for n in range(rand_hor, rand_hor + short_dim):
-        #        for c in range(3):
-        #            cropped_image[m, n, c] = 0
+    elif np.char.startswith(path, ".\\360cameraNUbotsField"):
+        cropped_image = img_to_array(img_full)
 
     return cropped_image
 
@@ -232,6 +266,19 @@ def get_output(image_path):
         xyzq[3:7] = json_data['rotation']
         #print(xyzq)
         return xyzq
+
+    elif np.char.startswith(image_path, ".\\360cameraNUbotsField"):
+        json_filename = image_path[:-3] + "json"
+        xyzq = np.zeros(7)
+        with open(json_filename) as f2:
+            json_data = json.load(f2)
+        xyzq[0:2] = json_data['position']
+        xyzq[2] = 0.831
+        angle = json_data['orientation']
+        r = R.from_euler('z',angle,degrees=True)
+        xyzq[3:7] = r.as_quat()
+        return xyzq
+
     else:
         print("Unrecognised dataset")
 
